@@ -1,0 +1,22 @@
+{
+  "name": "futuregolf",
+  "version": "1.0.0",
+  "description": "AI-powered golf swing analyzer",
+  "scripts": {
+    "start": "./start.sh",
+    "backend": "cd backend && source venv/bin/activate && python start_server.py",
+    "frontend": "cd frontend && npx expo start --ios",
+    "setup": "cd backend && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt && cd ../frontend && npm install",
+    "test": "cd frontend && npm test",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "install-deps": "cd backend && pip install -r requirements.txt && cd ../frontend && npm install",
+    "analyze-video": "source backend/venv/bin/activate && python backend/analyze_video.py",
+    "analyze-video-pro": "source backend/venv/bin/activate && python backend/analyze_video.py --model gemini-2.5-pro"
+  },
+  "keywords": ["golf", "ai", "swing-analysis", "mobile-app"],
+  "author": "FutureGolf Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

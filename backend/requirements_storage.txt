@@ -1,0 +1,12 @@
+# Additional requirements for Google Cloud Storage integration
+google-cloud-storage==2.20.0
+google-resumable-media==2.7.2
+google-auth==2.35.0
+google-cloud-core==2.4.1
+
+# Optional: For video processing
+opencv-python==4.10.0.84
+Pillow==11.0.0
+
+# Optional: For async operations
+aiofiles==24.1.0

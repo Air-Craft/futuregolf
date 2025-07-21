@@ -1,0 +1,13 @@
+GOLF SWING VIDEO ANALYSIS REQUEST
+
+Please analyze this golf swing video for detailed coaching feedback.
+
+VIDEO PROPERTIES:
+- Duration: {duration} seconds  
+- Original FPS: {fps}
+
+{coaching_prompt}
+
+IMPORTANT: 
+1. Return ONLY valid JSON response - no markdown, no code blocks, no additional text. The response must be parseable with json.loads().
+2. Focus on the major swing phases and body position changes throughout the video.

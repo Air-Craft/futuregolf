@@ -1,0 +1,50 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(npx create-expo-app:*)",
+      "Bash(python3:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(timeout:*)",
+      "Bash(chmod:*)",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(npx expo start:*)",
+      "Bash(npx expo install:*)",
+      "Bash(pkill:*)",
+      "Bash(xcrun simctl list:*)",
+      "Bash(xcrun simctl boot:*)",
+      "Bash(EXPO_SIMULATOR_DEVICE_ID=4B244D4D-3C8A-4504-89CC-664EBF010D59 npx expo start --ios)",
+      "Bash(true)",
+      "Bash(open:*)",
+      "Bash(npx expo run:ios:*)",
+      "Bash(rm:*)",
+      "Bash(xcrun simctl openurl:*)",
+      "Bash(xcrun simctl io:*)",
+      "Bash(claude mcp:*)",
+      "Bash(mv:*)",
+      "Bash(grep:*)",
+      "Bash(npm install:*)",
+      "Bash(watchman watch-del:*)",
+      "Bash(watchman:*)",
+      "Bash(node:*)",
+      "Bash(npx react-native bundle:*)",
+      "Bash(npx expo export:*)",
+      "Bash(npm start)",
+      "WebFetch(domain:ai.google.dev)",
+      "WebFetch(domain:github.com)",
+      "Bash(ffprobe:*)",
+      "Bash(rg:*)",
+      "Bash(osascript:*)",
+      "Bash(say:*)"
+    ],
+    "deny": []
+  },
+  "enabledMcpjsonServers": [
+    "neon",
+    "ios-simulator"
+  ]
+}
