@@ -3,7 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
 
-# Import authentication routers
+# Load environment variables FIRST before any other imports
+load_dotenv()
+
+# Import authentication routers AFTER loading env vars
 from api.auth_register import router as auth_register_router
 from api.auth_login import router as auth_login_router
 from api.auth_oauth import router as auth_oauth_router
@@ -13,9 +16,6 @@ from api.session_management import router as session_management_router
 from api.video_upload import router as video_upload_router
 from api.video_analysis import router as video_analysis_router
 from api.tts import router as tts_router
-
-# Load environment variables
-load_dotenv()
 
 app = FastAPI(
     title="FutureGolf API",

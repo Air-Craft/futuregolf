@@ -67,17 +67,13 @@ class StorageService:
             file_size = len(file.read())
             file.seek(0)
             
-            if file_size > self.config.resumable_threshold:
-                # Use resumable upload for large files
-                upload_result = await self._resumable_upload(blob, file, file_size)
-            else:
-                # Use simple upload for small files
-                blob.upload_from_file(file, content_type=content_type)
-                upload_result = {
-                    "blob_name": blob_name,
-                    "size": file_size,
-                    "resumable": False
-                }
+            # Always use simple upload for now (golf videos are typically < 100MB)
+            blob.upload_from_file(file, content_type=content_type)
+            upload_result = {
+                "blob_name": blob_name,
+                "size": file_size,
+                "resumable": False
+            }
             
             # Get public URL
             public_url = self.config.get_public_url(blob_name)
@@ -98,36 +94,6 @@ class StorageService:
                 "error": str(e)
             }
     
-    async def _resumable_upload(self, blob: storage.Blob, file: BinaryIO, file_size: int) -> Dict[str, Any]:
-        """Perform resumable upload for large files."""
-        try:
-            # Create resumable upload
-            upload_url = blob.create_resumable_upload_session(
-                content_type=blob.content_type,
-                size=file_size
-            )
-            
-            # Upload in chunks
-            upload_session = upload.ResumableUpload(
-                upload_url=upload_url,
-                chunk_size=self.config.chunk_size
-            )
-            
-            transport = requests.AuthorizedSession(self.client._credentials)
-            
-            # Upload file
-            response = upload_session.upload(file, transport)
-            
-            return {
-                "blob_name": blob.name,
-                "size": file_size,
-                "resumable": True,
-                "response": response
-            }
-            
-        except Exception as e:
-            logger.error(f"Resumable upload failed: {e}")
-            raise
     
     async def upload_thumbnail(
         self, 

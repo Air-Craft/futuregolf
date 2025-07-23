@@ -88,7 +88,7 @@ class ApiService {
     return response.json();
   }
 
-  async pollAnalysis(videoId, maxAttempts = 60, interval = 2000) {
+  async pollAnalysis(videoId, maxAttempts = 60, interval = 2000, onProgress = null) {
     let attempts = 0;
     
     while (attempts < maxAttempts) {
@@ -98,6 +98,16 @@ class ApiService {
         return data.analysis;
       } else if (data.analysis && data.analysis.status === 'failed') {
         throw new Error(data.analysis.error_message || 'Analysis failed');
+      }
+      
+      // Update progress callback
+      if (onProgress && data.analysis && data.analysis.status === 'processing') {
+        const progressMessage = attempts < 5 ? 'Extracting video frames...' :
+                               attempts < 10 ? 'Analyzing body position...' :
+                               attempts < 15 ? 'Detecting swing phases...' :
+                               attempts < 20 ? 'Calculating metrics...' :
+                               'Finalizing analysis...';
+        onProgress(progressMessage);
       }
       
       await new Promise(resolve => setTimeout(resolve, interval));

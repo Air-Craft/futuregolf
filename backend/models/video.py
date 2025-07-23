@@ -43,7 +43,7 @@ class Video(Base):
     resolution = Column(String(50), nullable=True)  # e.g., "1920x1080"
     
     # Storage information
-    video_url = Column(Text, nullable=False)  # URL to original video
+    video_url = Column(Text, nullable=True)  # URL to original video (set after upload)
     video_blob_name = Column(Text, nullable=True)  # GCS blob name for video
     thumbnail_url = Column(Text, nullable=True)  # URL to video thumbnail
     thumbnail_blob_name = Column(Text, nullable=True)  # GCS blob name for thumbnail
