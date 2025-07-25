@@ -11,8 +11,10 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Video } from 'expo-av';
 import * as MediaLibrary from 'expo-media-library';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import SwingReview from './SwingReview';
+import api from '../services/api';
 
 const { width, height } = Dimensions.get('window');
 
@@ -27,6 +29,7 @@ export default function VideoRecording({ navigation }) {
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [analysisData, setAnalysisData] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState('');
   
   const cameraRef = useRef(null);
   const recordingTimerRef = useRef(null);
@@ -60,7 +63,7 @@ export default function VideoRecording({ navigation }) {
         mute: false,
       });
       
-      setRecordedVideo(video);
+      setRecordedVideo({ ...video, wasRecorded: true });
       
     } catch (error) {
       console.error('Error starting recording:', error);
@@ -76,6 +79,7 @@ export default function VideoRecording({ navigation }) {
       clearInterval(recordingTimerRef.current);
       
       await cameraRef.current.stopRecording();
+      setShowPreview(true); // Show preview after recording
       
     } catch (error) {
       console.error('Error stopping recording:', error);
@@ -87,34 +91,72 @@ export default function VideoRecording({ navigation }) {
     setCameraType(current => current === 'back' ? 'front' : 'back');
   };
 
+  const pickVideoFromLibrary = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: false,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const videoAsset = result.assets[0];
+        setRecordedVideo({
+          uri: videoAsset.uri,
+          width: videoAsset.width,
+          height: videoAsset.height,
+          duration: videoAsset.duration,
+          wasRecorded: false, // This was picked from library, not recorded
+        });
+        setShowPreview(true);
+      }
+    } catch (error) {
+      console.error('Error picking video:', error);
+      Alert.alert('Error', 'Failed to pick video from library');
+    }
+  };
+
   const uploadVideoForAnalysis = async (videoUri) => {
     try {
       // Create form data
       const formData = new FormData();
-      formData.append('video', {
+      formData.append('file', {
         uri: videoUri,
         type: 'video/mp4',
         name: `swing_${Date.now()}.mp4`,
       });
-      formData.append('view_angle', cameraType === 'back' ? 'down_the_line' : 'front');
-      formData.append('club_type', 'driver'); // Default to driver, can be made selectable
+      formData.append('title', `Golf Swing - ${new Date().toLocaleDateString()}`);
+      formData.append('description', `${cameraType === 'back' ? 'Down-the-line' : 'Front'} view with driver`);
+      formData.append('user_id', '1'); // TODO: Get from auth context when implemented
       
       // Upload video to backend
-      const uploadResponse = await fetch('http://localhost:8000/api/v1/videos/upload', {
+      const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1';
+      console.log('Uploading to:', `${apiBaseUrl}/videos/upload`);
+      
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      
+      const uploadResponse = await fetch(`${apiBaseUrl}/videos/upload`, {
         method: 'POST',
         body: formData,
         headers: {
+          // Don't set Content-Type for FormData - let browser set it with boundary
           // Add authentication token when implemented
           // 'Authorization': `Bearer ${authToken}`,
         },
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
+      
+      const responseText = await uploadResponse.text();
+      console.log('Upload response:', uploadResponse.status, responseText);
       
       if (!uploadResponse.ok) {
-        throw new Error('Failed to upload video');
+        throw new Error(`Upload failed: ${uploadResponse.status} - ${responseText}`);
       }
       
-      const uploadData = await uploadResponse.json();
-      return uploadData.video_id;
+      const uploadData = JSON.parse(responseText);
+      return uploadData.video_id || uploadData.id;
       
     } catch (error) {
       console.error('Error uploading video:', error);
@@ -124,21 +166,7 @@ export default function VideoRecording({ navigation }) {
 
   const startVideoAnalysis = async (videoId) => {
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/video-analysis/analyze/${videoId}`, {
-        method: 'POST',
-        headers: {
-          // Add authentication token when implemented
-          // 'Authorization': `Bearer ${authToken}`,
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to start analysis');
-      }
-      
-      const data = await response.json();
-      return data;
-      
+      return await api.startAnalysis(videoId);
     } catch (error) {
       console.error('Error starting analysis:', error);
       throw error;
@@ -146,41 +174,14 @@ export default function VideoRecording({ navigation }) {
   };
 
   const pollAnalysisStatus = async (videoId) => {
-    const maxAttempts = 60; // 60 attempts at 2 seconds = 2 minutes max
-    let attempts = 0;
-    
-    while (attempts < maxAttempts) {
-      try {
-        const response = await fetch(`http://localhost:8000/api/v1/video-analysis/video/${videoId}`, {
-          headers: {
-            // Add authentication token when implemented
-            // 'Authorization': `Bearer ${authToken}`,
-          },
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to get analysis status');
-        }
-        
-        const data = await response.json();
-        
-        if (data.analysis && data.analysis.status === 'completed') {
-          return data.analysis;
-        } else if (data.analysis && data.analysis.status === 'failed') {
-          throw new Error(data.analysis.error_message || 'Analysis failed');
-        }
-        
-        // Wait 2 seconds before next poll
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        attempts++;
-        
-      } catch (error) {
-        console.error('Error polling analysis:', error);
-        throw error;
-      }
+    try {
+      return await api.pollAnalysis(videoId, 60, 2000, (status) => {
+        setAnalysisStatus(status);
+      });
+    } catch (error) {
+      console.error('Error polling analysis:', error);
+      throw error;
     }
-    
-    throw new Error('Analysis timeout - please try again');
   };
 
   const saveVideo = async () => {
@@ -189,64 +190,48 @@ export default function VideoRecording({ navigation }) {
     try {
       setIsLoading(true);
       
-      // Save to device gallery
-      const asset = await MediaLibrary.createAssetAsync(recordedVideo.uri);
+      // Only save to device gallery if it was recorded (not picked from library)
+      if (recordedVideo.wasRecorded) {
+        const asset = await MediaLibrary.createAssetAsync(recordedVideo.uri);
+        console.log('Saved recorded video to gallery');
+      }
       
       // Upload video and start analysis
       setShowPreview(false);
       setIsAnalyzing(true);
       setShowAnalysis(true);
       
-      // Mock analysis for development - replace with actual API calls
-      // const videoId = await uploadVideoForAnalysis(recordedVideo.uri);
-      // await startVideoAnalysis(videoId);
-      // const analysisResult = await pollAnalysisStatus(videoId);
+      // Upload video and start analysis
+      setAnalysisStatus('Uploading video...');
+      console.log('Uploading video for analysis...');
+      const videoId = await uploadVideoForAnalysis(recordedVideo.uri);
+      console.log('Video uploaded, ID:', videoId);
       
-      // Mock analysis data for testing
-      setTimeout(() => {
-        setAnalysisData({
-          ai_analysis: {
-            overall_score: 78,
-            coaching_feedback: "Great swing! Your setup position is solid with good posture and alignment. During the backswing, you maintain excellent spine angle and achieve a full shoulder turn. The transition from backswing to downswing is smooth, showing good tempo. At impact, your weight has transferred nicely to the front foot. To improve further, focus on maintaining your spine angle through impact - you tend to stand up slightly. Also, work on keeping your head steady throughout the swing for better consistency. Practice these adjustments with slow-motion swings to build muscle memory.",
-            swing_metrics: {
-              clubSpeed: "95",
-              swingPlane: "48",
-              tempoRatio: "3:1",
-              impactPosition: "Centered"
-            },
-            body_angles: {
-              spineAngle: "32",
-              hipRotation: "45",
-              shoulderTurn: "92"
-            },
-            recommendations: [
-              {
-                title: "Maintain Spine Angle",
-                description: "Focus on keeping your spine angle consistent through impact to improve ball striking",
-                priority: "high"
-              },
-              {
-                title: "Head Position",
-                description: "Keep your head steady and behind the ball at impact",
-                priority: "medium"
-              }
-            ],
-            timestamps: [
-              { time: "0:02", label: "Setup" },
-              { time: "0:04", label: "Backswing" },
-              { time: "0:06", label: "Impact" },
-              { time: "0:08", label: "Follow-through" }
-            ]
-          }
-        });
-        setIsAnalyzing(false);
-      }, 3000);
+      setAnalysisStatus('Starting analysis...');
+      await startVideoAnalysis(videoId);
+      console.log('Analysis started, polling for results...');
+      
+      setAnalysisStatus('Analyzing swing...');
+      const analysisResult = await pollAnalysisStatus(videoId);
+      console.log('Analysis complete:', analysisResult);
+      
+      // Set the real analysis data
+      setAnalysisData(analysisResult);
+      setIsAnalyzing(false);
+      setAnalysisStatus('');
+      
+      /* Mock analysis data for testing - REMOVED
+      // Mock data removed - using real API now
+      */
       
     } catch (error) {
       console.error('Error processing video:', error);
-      Alert.alert('Error', 'Failed to process video. Please try again.');
+      const errorMessage = error.message || 'Failed to process video. Please try again.';
+      Alert.alert('Upload Error', errorMessage);
       setIsAnalyzing(false);
       setShowAnalysis(false);
+      setShowPreview(false);
+      setRecordedVideo(null);
     } finally {
       setIsLoading(false);
     }
@@ -310,20 +295,31 @@ export default function VideoRecording({ navigation }) {
         {/* Controls */}
         <View style={styles.controlsContainer}>
           {/* Camera Toggle */}
-          <TouchableOpacity style={styles.controlButton} onPress={toggleCamera}>
-            <Ionicons name="camera-reverse" size={30} color="white" />
-          </TouchableOpacity>
+          <View style={styles.controlWrapper}>
+            <TouchableOpacity style={styles.controlButton} onPress={toggleCamera}>
+              <Ionicons name="camera-reverse" size={30} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.controlLabel}>Flip</Text>
+          </View>
           
           {/* Record Button */}
-          <TouchableOpacity
-            style={[styles.recordButton, isRecording && styles.recordButtonActive]}
-            onPress={isRecording ? stopRecording : startRecording}
-          >
-            <View style={[styles.recordButtonInner, isRecording && styles.recordButtonInnerActive]} />
-          </TouchableOpacity>
+          <View style={styles.controlWrapper}>
+            <TouchableOpacity
+              style={[styles.recordButton, isRecording && styles.recordButtonActive]}
+              onPress={isRecording ? stopRecording : startRecording}
+            >
+              <View style={[styles.recordButtonInner, isRecording && styles.recordButtonInnerActive]} />
+            </TouchableOpacity>
+            <Text style={styles.controlLabel}>{isRecording ? 'Stop' : 'Record'}</Text>
+          </View>
           
-          {/* Placeholder for alignment */}
-          <View style={styles.controlButton} />
+          {/* Upload Button */}
+          <View style={styles.controlWrapper}>
+            <TouchableOpacity style={styles.controlButton} onPress={pickVideoFromLibrary}>
+              <Ionicons name="folder-open" size={30} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.controlLabel}>Upload</Text>
+          </View>
         </View>
       </CameraView>
 
@@ -353,7 +349,12 @@ export default function VideoRecording({ navigation }) {
             
             <TouchableOpacity 
               style={[styles.previewButton, styles.saveButton]} 
-              onPress={saveVideo}
+              onPress={() => {
+                saveVideo().catch(error => {
+                  console.error('Unhandled error in saveVideo:', error);
+                  Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+                });
+              }}
               disabled={isLoading}
             >
               <Text style={styles.previewButtonText}>
@@ -364,10 +365,7 @@ export default function VideoRecording({ navigation }) {
         </View>
       </Modal>
       
-      {/* Show preview when recording is complete */}
-      {recordedVideo && !showPreview && (
-        setShowPreview(true)
-      )}
+      {/* Preview is now shown in stopRecording() and pickVideoFromLibrary() */}
 
       {/* Swing Review Modal */}
       <Modal
@@ -384,6 +382,7 @@ export default function VideoRecording({ navigation }) {
           videoUri={recordedVideo?.uri}
           analysisData={analysisData}
           isAnalyzing={isAnalyzing}
+          analysisStatus={analysisStatus}
           onClose={() => {
             setShowAnalysis(false);
             setAnalysisData(null);
@@ -467,6 +466,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'center',
     paddingHorizontal: 20,
+  },
+  controlWrapper: {
+    alignItems: 'center',
+  },
+  controlLabel: {
+    color: 'white',
+    fontSize: 12,
+    marginTop: 5,
+    fontWeight: '500',
   },
   controlButton: {
     width: 60,

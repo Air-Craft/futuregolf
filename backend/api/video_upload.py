@@ -28,6 +28,7 @@ async def upload_video(
 ):
     """Upload a video file to Google Cloud Storage."""
     try:
+        logger.info(f"Received upload request - file: {file.filename}, user_id: {user_id}")
         # Validate file
         if not file.filename:
             raise HTTPException(status_code=400, detail="No file provided")
@@ -59,12 +60,14 @@ async def upload_video(
         
         # Reset file pointer and upload to GCS
         await file.seek(0)
+        
+        # Upload directly with the file object
         upload_result = await get_storage_service().upload_video(
             file=file.file,
             filename=file.filename,
             user_id=user_id,
             video_id=video.id,
-            content_type=file.content_type
+            content_type=file.content_type or 'video/mp4'
         )
         
         if upload_result["success"]:
@@ -96,8 +99,8 @@ async def upload_video(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Video upload error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Video upload error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Upload error: {str(e)}")
 
 
 @router.post("/{video_id}/thumbnail")

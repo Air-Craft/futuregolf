@@ -19,7 +19,8 @@ export default function SwingReview({
   videoUri, 
   analysisData,
   onClose,
-  isAnalyzing = false 
+  isAnalyzing = false,
+  analysisStatus = ''
 }) {
   const [activeTab, setActiveTab] = useState('video');
   const [videoStatus, setVideoStatus] = useState({});
@@ -27,11 +28,31 @@ export default function SwingReview({
   const videoRef = useRef(null);
 
   // Extract coaching data from analysis
-  const coachingScript = analysisData?.ai_analysis?.coaching_feedback || '';
-  const swingMetrics = analysisData?.ai_analysis?.swing_metrics || {};
-  const bodyAngles = analysisData?.ai_analysis?.body_angles || {};
-  const recommendations = analysisData?.ai_analysis?.recommendations || [];
-  const overallScore = analysisData?.ai_analysis?.overall_score || 0;
+  const coachingScriptData = analysisData?.ai_analysis?.coaching_script || {};
+  // Convert coaching script lines array to a single string for TTS
+  const coachingScript = coachingScriptData?.lines 
+    ? coachingScriptData.lines.map(line => line.text).join(' ')
+    : '';
+  // Use biomechanical_scores for metrics data, fall back to swing_metrics
+  const swingMetrics = analysisData?.biomechanical_scores || analysisData?.swing_metrics || {};
+  const bodyAngles = analysisData?.body_angles || analysisData?.body_position_data || {};
+  // Try to get recommendations from multiple possible locations
+  let recommendations = analysisData?.ai_analysis?.summary?.improvements || 
+                      analysisData?.pose_analysis?.recommendations ||
+                      [];
+  
+  // If no recommendations in summary, try to use swing comments as fallback
+  if (recommendations.length === 0 && analysisData?.ai_analysis?.swings?.[0]?.comments) {
+    recommendations = analysisData.ai_analysis.swings[0].comments;
+  }
+  
+  // Debug log to see what recommendations we have
+  console.log('Recommendations:', recommendations);
+  console.log('AI Analysis Summary:', analysisData?.ai_analysis?.summary);
+  console.log('Swing comments:', analysisData?.ai_analysis?.swings?.[0]?.comments);
+  // Look for overall score in biomechanical_scores first, then fall back to swing_metrics
+  const overallScore = analysisData?.biomechanical_scores?.overall_score || 
+                      analysisData?.swing_metrics?.overall_score || 0;
 
   useEffect(() => {
     // Auto-play video when component mounts
@@ -123,11 +144,11 @@ export default function SwingReview({
             <View style={styles.overlayMetrics}>
               <View style={styles.overlayMetric}>
                 <Text style={styles.overlayMetricLabel}>Tempo</Text>
-                <Text style={styles.overlayMetricValue}>{swingMetrics.tempo || 'N/A'}</Text>
+                <Text style={styles.overlayMetricValue}>{swingMetrics.tempo_score || 'N/A'}/10</Text>
               </View>
               <View style={styles.overlayMetric}>
                 <Text style={styles.overlayMetricLabel}>Balance</Text>
-                <Text style={styles.overlayMetricValue}>{swingMetrics.balance || 'N/A'}</Text>
+                <Text style={styles.overlayMetricValue}>{swingMetrics.balance_score || 'N/A'}/10</Text>
               </View>
             </View>
           </View>
@@ -170,10 +191,10 @@ export default function SwingReview({
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Swing Metrics</Text>
         <View style={styles.metricsGrid}>
-          {renderMetricCard('Club Speed', swingMetrics.clubSpeed || '—', 'mph', 'speedometer-outline')}
-          {renderMetricCard('Swing Plane', swingMetrics.swingPlane || '—', '°', 'analytics-outline')}
-          {renderMetricCard('Tempo Ratio', swingMetrics.tempoRatio || '—', '', 'time-outline')}
-          {renderMetricCard('Impact Position', swingMetrics.impactPosition || '—', '', 'locate-outline')}
+          {renderMetricCard('Balance', swingMetrics.balance_score || '—', '/100', 'speedometer-outline')}
+          {renderMetricCard('K. Chain', swingMetrics.kinetic_chain_score || '—', '/100', 'time-outline')}
+          {renderMetricCard('Power', swingMetrics.power_transfer_score || '—', '/100', 'analytics-outline')}
+          {renderMetricCard('Overall', swingMetrics.overall_score || '—', '/100', 'locate-outline')}
         </View>
       </View>
 
@@ -183,15 +204,21 @@ export default function SwingReview({
         <View style={styles.bodyAnglesContainer}>
           <View style={styles.angleItem}>
             <Text style={styles.angleLabel}>Spine Angle</Text>
-            <Text style={styles.angleValue}>{bodyAngles.spineAngle || '—'}°</Text>
+            <Text style={styles.angleValue}>
+              {bodyAngles.spine_angle?.setup?.angle ? `${bodyAngles.spine_angle.setup.angle.toFixed(1)}` : '—'}°
+            </Text>
           </View>
           <View style={styles.angleItem}>
             <Text style={styles.angleLabel}>Hip Rotation</Text>
-            <Text style={styles.angleValue}>{bodyAngles.hipRotation || '—'}°</Text>
+            <Text style={styles.angleValue}>
+              {bodyAngles.hip_rotation?.backswing?.angle ? `${bodyAngles.hip_rotation.backswing.angle.toFixed(1)}` : '—'}°
+            </Text>
           </View>
           <View style={[styles.angleItem, styles.lastAngleItem]}>
             <Text style={styles.angleLabel}>Shoulder Turn</Text>
-            <Text style={styles.angleValue}>{bodyAngles.shoulderTurn || '—'}°</Text>
+            <Text style={styles.angleValue}>
+              {bodyAngles.shoulder_tilt?.backswing?.angle ? `${bodyAngles.shoulder_tilt.backswing.angle.toFixed(1)}` : '—'}°
+            </Text>
           </View>
         </View>
       </View>
@@ -206,14 +233,22 @@ export default function SwingReview({
     </ScrollView>
   );
 
-  const renderCoachingTab = () => (
-    <CoachingDisplay
-      coachingScript={coachingScript}
-      timestamps={analysisData?.ai_analysis?.timestamps || []}
-      onTimestampPress={handleSeekToTimestamp}
-      isLoading={isAnalyzing}
-    />
-  );
+  const renderCoachingTab = () => {
+    // Convert coaching script lines to timestamps for the display
+    const timestamps = coachingScriptData?.lines?.map((line, index) => ({
+      time: line.start_frame_number || 0,
+      label: `Part ${index + 1}`
+    })) || [];
+    
+    return (
+      <CoachingDisplay
+        coachingScript={coachingScript}
+        timestamps={timestamps}
+        onTimestampPress={handleSeekToTimestamp}
+        isLoading={isAnalyzing}
+      />
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -276,7 +311,7 @@ export default function SwingReview({
         {isAnalyzing ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={styles.loadingText}>Analyzing your swing...</Text>
+            <Text style={styles.loadingText}>{analysisStatus || 'Processing...'}</Text>
             <Text style={styles.loadingSubtext}>This may take a moment</Text>
           </View>
         ) : (

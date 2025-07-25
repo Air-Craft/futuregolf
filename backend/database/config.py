@@ -23,7 +23,20 @@ DATABASE_URL = os.getenv(
 )
 
 # Async database URL (replace postgresql with postgresql+asyncpg)
-ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+# For asyncpg, we need to handle SSL parameters differently
+if "sslmode=" in DATABASE_URL:
+    # Remove sslmode parameter and add ssl=require for asyncpg
+    base_url, params = DATABASE_URL.split("?", 1)
+    params_dict = dict(param.split("=") for param in params.split("&") if "=" in param)
+    if params_dict.get("sslmode") == "require":
+        params_dict["ssl"] = "require"
+    params_dict.pop("sslmode", None)
+    new_params = "&".join(f"{k}={v}" for k, v in params_dict.items())
+    ASYNC_DATABASE_URL = base_url.replace("postgresql://", "postgresql+asyncpg://")
+    if new_params:
+        ASYNC_DATABASE_URL += f"?{new_params}"
+else:
+    ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 
 # Parse DATABASE_URL to detect Neon hosting
 parsed_url = urlparse(DATABASE_URL)
@@ -44,14 +57,8 @@ if is_neon:
         "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", "30")),  # 30 seconds timeout
         "connect_args": {
             "sslmode": "require",
-            "connect_timeout": 10,
-            "command_timeout": 60,
-            "server_settings": {
-                "jit": "off",  # Disable JIT for better cold start performance
-                "statement_timeout": "60000",  # 60 seconds
-                "lock_timeout": "30000",  # 30 seconds
-                "idle_in_transaction_session_timeout": "300000",  # 5 minutes
-            }
+            "connect_timeout": 10
+            # Neon pooled connections don't support startup parameters
         }
     }
     
@@ -80,6 +87,8 @@ engine = create_engine(**engine_kwargs)
 # Create async engine
 async_engine_kwargs = engine_kwargs.copy()
 async_engine_kwargs["url"] = ASYNC_DATABASE_URL
+# asyncpg handles SSL differently - remove connect_args
+async_engine_kwargs.pop("connect_args", None)
 async_engine = create_async_engine(**async_engine_kwargs)
 
 # Create SessionLocal class

@@ -25,7 +25,7 @@ except ImportError:
     GEMINI_AVAILABLE = False
     logging.warning("Google Gemini AI not available. Install google-genai package.")
 
-from database.config import get_db_session
+from database.config import AsyncSessionLocal
 from models.video_analysis import VideoAnalysis, AnalysisStatus
 from models.video import Video
 from services.storage_service import get_storage_service
@@ -57,13 +57,25 @@ class VideoAnalysisService:
         if GEMINI_AVAILABLE and self.gemini_api_key:
             self.client = genai.Client(api_key=self.gemini_api_key)
             
-            # Safety settings for video analysis
-            self.safety_settings = {
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-            }
+            # Safety settings for video analysis (as list of dicts)
+            self.safety_settings = [
+                {
+                    "category": HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                    "threshold": HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
+                },
+                {
+                    "category": HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                    "threshold": HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
+                },
+                {
+                    "category": HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                    "threshold": HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
+                },
+                {
+                    "category": HarmCategory.HARM_CATEGORY_HARASSMENT,
+                    "threshold": HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
+                }
+            ]
             
             # Model configuration for new API
             self.model_name = "gemini-2.5-flash"
@@ -74,6 +86,12 @@ class VideoAnalysisService:
             logger.info("Google Gemini AI v2 initialized successfully")
         else:
             logger.warning("Google Gemini AI not configured. Check GEMINI_API_KEY environment variable.")
+    
+    def analyze_video_sync(self, video_id: int, user_id: int) -> None:
+        """Synchronous wrapper for analyze_video to be used in background tasks."""
+        # Use the sync version to avoid event loop conflicts
+        from services.video_analysis_service_sync import analyze_video_sync
+        analyze_video_sync(self, video_id, user_id)
     
     async def analyze_video(self, video_id: int, user_id: int) -> Dict[str, Any]:
         """
@@ -88,20 +106,29 @@ class VideoAnalysisService:
         """
         try:
             # Get video and analysis records
-            async with get_db_session() as session:
+            analysis_id = None
+            video_url = None
+            video_blob_name = None
+            
+            async with AsyncSessionLocal() as session:
                 video = await session.get(Video, video_id)
                 if not video or video.user_id != user_id:
                     raise ValueError("Video not found or access denied")
+                
+                # Store video info before session closes
+                video_url = video.video_url
+                video_blob_name = video.video_blob_name
                 
                 # Create or get analysis record
                 analysis = await self._get_or_create_analysis(session, video_id, user_id)
                 analysis.start_processing()
                 await session.commit()
+                analysis_id = analysis.id
             
             logger.info(f"Starting video analysis for video_id={video_id}, user_id={user_id}")
             
             # Download video file
-            video_path = await self._download_video(video.blob_name)
+            video_path = await self._download_video(video_blob_name or video_url)
             
             # Perform pose analysis
             pose_analysis_result = {}
@@ -117,8 +144,8 @@ class VideoAnalysisService:
             analysis_result = await self._analyze_with_gemini(video_path, coaching_prompt, pose_analysis_result)
             
             # Update analysis record with results
-            async with get_db_session() as session:
-                analysis = await session.get(VideoAnalysis, analysis.id)
+            async with AsyncSessionLocal() as session:
+                analysis = await session.get(VideoAnalysis, analysis_id)
                 
                 # Store pose analysis data separately
                 if pose_analysis_result.get('success'):
@@ -151,13 +178,15 @@ class VideoAnalysisService:
             logger.error(f"Video analysis failed for video_id={video_id}: {e}")
             
             # Update analysis record with error
-            try:
-                async with get_db_session() as session:
-                    analysis = await session.get(VideoAnalysis, analysis.id)
-                    analysis.mark_as_failed(str(e))
-                    await session.commit()
-            except Exception as db_error:
-                logger.error(f"Failed to update analysis record: {db_error}")
+            if analysis_id:
+                try:
+                    async with AsyncSessionLocal() as session:
+                        analysis = await session.get(VideoAnalysis, analysis_id)
+                        if analysis:
+                            analysis.mark_as_failed(str(e))
+                            await session.commit()
+                except Exception as db_error:
+                    logger.error(f"Failed to update analysis record: {db_error}")
             
             return {
                 "success": False,
@@ -190,11 +219,25 @@ class VideoAnalysisService:
         await session.flush()
         return analysis
     
-    async def _download_video(self, blob_name: str) -> str:
+    async def _download_video(self, blob_name_or_url: str) -> str:
         """Download video file from storage to temporary location."""
         try:
-            # Generate signed URL for download
-            signed_url = await self.storage_service.generate_signed_url(blob_name)
+            # Check if it's a full URL and extract blob name
+            if blob_name_or_url.startswith('http'):
+                # Extract blob name from GCS URL
+                if "storage.googleapis.com/" in blob_name_or_url:
+                    parts = blob_name_or_url.replace("https://storage.googleapis.com/", "").split("/", 1)
+                    if len(parts) == 2:
+                        blob_name = parts[1]
+                        # Generate signed URL for the blob
+                        signed_url = await self.storage_service.generate_signed_url(blob_name)
+                    else:
+                        signed_url = blob_name_or_url
+                else:
+                    signed_url = blob_name_or_url
+            else:
+                # Generate signed URL for download
+                signed_url = await self.storage_service.generate_signed_url(blob_name_or_url)
             
             # Download file to temp location
             temp_path = os.path.join(self.temp_dir, f"video_{datetime.now().timestamp()}.mp4")
@@ -210,7 +253,7 @@ class VideoAnalysisService:
             return temp_path
             
         except Exception as e:
-            logger.error(f"Failed to download video {blob_name}: {e}")
+            logger.error(f"Failed to download video {blob_name_or_url}: {e}")
             raise
     
     async def _load_coaching_prompt(self) -> str:
@@ -296,7 +339,7 @@ IMPORTANT:
             print(f"\n📤 Uploading video to Gemini ({os.path.getsize(video_path) / 1024 / 1024:.1f}MB)...")
             upload_start = time.time()
             
-            video_file = await self.client.aio.files.upload(path=video_path)
+            video_file = await self.client.aio.files.upload(file=video_path)
             
             # Wait for file to be processed
             processing_count = 0
@@ -370,11 +413,16 @@ IMPORTANT:
             print(f"    Prompt length: {len(enhanced_prompt)} chars")
             
             try:
+                # Combine generation config with safety settings
+                full_config = {
+                    **self.generation_config,
+                    'safety_settings': self.safety_settings
+                }
+                
                 response = await self.client.aio.models.generate_content(
                     model=self.model_name,
                     contents=[video_file, enhanced_prompt],
-                    config=self.generation_config,
-                    safety_settings=self.safety_settings
+                    config=full_config
                 )
                 print("✅ Gemini API call completed successfully")
             except Exception as api_error:
@@ -507,7 +555,7 @@ IMPORTANT:
     async def get_analysis_status(self, analysis_id: int, user_id: int) -> Dict[str, Any]:
         """Get the status of an analysis."""
         try:
-            async with get_db_session() as session:
+            async with AsyncSessionLocal() as session:
                 analysis = await session.get(VideoAnalysis, analysis_id)
                 
                 if not analysis or analysis.user_id != user_id:
@@ -532,7 +580,7 @@ IMPORTANT:
     async def get_analysis_results(self, analysis_id: int, user_id: int) -> Dict[str, Any]:
         """Get the results of a completed analysis."""
         try:
-            async with get_db_session() as session:
+            async with AsyncSessionLocal() as session:
                 analysis = await session.get(VideoAnalysis, analysis_id)
                 
                 if not analysis or analysis.user_id != user_id:
@@ -607,11 +655,16 @@ IMPORTANT:
                     print("-"*40)
                     
                     api_start_time = time.time()
+                    # Combine generation config with safety settings
+                    full_config = {
+                        **self.generation_config,
+                        'safety_settings': self.safety_settings
+                    }
+                    
                     response = await self.client.aio.models.generate_content(
                         model=self.model_name,
                         contents=[formatted_prompt],
-                        config=self.generation_config,
-                        safety_settings=self.safety_settings
+                        config=full_config
                     )
                     api_elapsed = time.time() - api_start_time
                     
@@ -743,6 +796,37 @@ IMPORTANT:
         except Exception as e:
             logger.warning(f"Failed to validate analysis result: {e}")
 
+    async def _analyze_video_async_parts(self, video_blob_name: str) -> Dict[str, Any]:
+        """Async parts of video analysis that can be called from sync context."""
+        try:
+            # Download video file
+            video_path = await self._download_video(video_blob_name)
+            
+            # Perform pose analysis
+            pose_analysis_result = {}
+            if self.pose_analysis_service:
+                logger.info("Starting pose analysis...")
+                pose_analysis_result = await self.pose_analysis_service.analyze_video_pose(video_path)
+                logger.info("Pose analysis completed")
+            
+            # Load coaching prompts
+            coaching_prompt = await self._load_coaching_prompt()
+            
+            # Analyze video with Gemini
+            analysis_result = await self._analyze_with_gemini(video_path, coaching_prompt, pose_analysis_result)
+            
+            # Clean up temporary file
+            os.unlink(video_path)
+            
+            return {
+                'analysis_result': analysis_result,
+                'pose_analysis': pose_analysis_result
+            }
+            
+        except Exception as e:
+            logger.error(f"Async video analysis parts failed: {e}")
+            raise
+    
     def _clean_analysis_phases(self, analysis_result: Dict[str, Any]) -> None:
         """Remove impact phase and ensure only 4 phases as specified in prompt."""
         try:
