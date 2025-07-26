@@ -16,6 +16,7 @@ from api.session_management import router as session_management_router
 from api.video_upload import router as video_upload_router
 from api.video_analysis import router as video_analysis_router
 from api.tts import router as tts_router
+from routers.waitlist import router as waitlist_router
 
 app = FastAPI(
     title="FutureGolf API",
@@ -43,6 +44,7 @@ app.include_router(session_management_router)
 app.include_router(video_upload_router)
 app.include_router(video_analysis_router)
 app.include_router(tts_router)
+app.include_router(waitlist_router)
 
 @app.get("/")
 async def root():

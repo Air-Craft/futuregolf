@@ -1,4 +1,11 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Temporary files
 tmp/
+
+# Video files
 *.mov
 *.mp4
 *.m4v
