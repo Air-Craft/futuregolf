@@ -131,7 +131,7 @@ class VideoAnalyzer:
             print(f"📤 Uploading video to Gemini ({os.path.getsize(video_path) / 1024 / 1024:.1f}MB)...")
             upload_start = time.time()
             
-            video_file = await self.client.aio.files.upload(path=video_path)
+            video_file = await self.client.aio.files.upload(file=video_path)
             
             # Wait for processing
             processing_count = 0
