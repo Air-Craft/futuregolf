@@ -4,3 +4,7 @@ tmp/
 *.m4v
 *.MOV
 
+# macOS
+.DS_Store
+
+.DS_Store
