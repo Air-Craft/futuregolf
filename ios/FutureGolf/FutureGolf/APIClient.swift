@@ -1,7 +1,7 @@
 import Foundation
 
 class APIClient {
-    private let baseURL = "http://192.168.1.114:8000/api/v1"
+    private let baseURL = "https://api.golfswinganalysis.ai/api/v1"
     private let session = URLSession.shared
     
     func uploadAndAnalyzeVideo(url: URL) async -> AnalysisResult? {
