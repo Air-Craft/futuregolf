@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+*.cover
+*.log
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.hypothesis/
+*.egg-info/
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Test files
+tests/
+test_*.py
+*_test.py
+pytest.ini
+
+# Sample files
+sample-video/
+test_results/
+
+# Credentials (we'll handle these separately)
+gcs-credential.json
+
+# Development scripts
+setup_*.py
+test_*.py
+demo_*.py
+analyze_video.py
+verify_*.py
+
+# Logs
+*.log
+backend.log
+
+# Temporary files
+temp/
+tmp/
+*.tmp
