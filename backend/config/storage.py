@@ -94,23 +94,13 @@ class StorageConfig:
             raise
     
     def get_bucket(self) -> storage.Bucket:
-        """Get or create the storage bucket."""
+        """Get the storage bucket."""
         client = self.get_storage_client()
         bucket = client.bucket(self.bucket_name)
         
-        # Check if bucket exists, create if not
-        try:
-            bucket.reload()
-        except GoogleCloudError:
-            logger.info(f"Creating bucket: {self.bucket_name}")
-            bucket = client.create_bucket(
-                self.bucket_name,
-                location=self.location
-            )
-            bucket.storage_class = self.default_storage_class
-            bucket.patch()
-            self._configure_bucket_lifecycle(bucket)
-        
+        # Don't try to create bucket - assume it exists
+        # This avoids permission errors when the service account
+        # doesn't have project-level bucket creation permissions
         return bucket
     
     def _configure_bucket_lifecycle(self, bucket: storage.Bucket):
