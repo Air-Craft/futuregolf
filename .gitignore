@@ -4,3 +4,4 @@ tmp/
 *.m4v
 *.MOV
 
+.DS_Store
