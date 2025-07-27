@@ -14,12 +14,6 @@ COACHING SCRIPT:
 Imagine the video will be played at 0.25x speed. Create a script that will be read (via TTS) on top of the video. Each entry includes text to speak and a frame number (based on the original video) where it should begin. End with a summary that includes highlights and suggestions for improvement. The speech may overrun the end of the video but try to be sure the earlier words will not overlap when read overtop of the 0.25x speed video.
 
 
-INPUT FORMAT:
-- Video duration: {duration} seconds
-- Frame rate: {frame_rate} fps
-- Total frames: Approximately {duration} * {frame_rate}
-
-
 OUTPUT FORMAT:
 Return a JSON object with:
 {
@@ -39,9 +33,10 @@ Return a JSON object with:
     "highlights": [<string>,...],
     "improvements": [<string>, ....]
   }
-  "coaching_script": 
+  "coaching_script": {
     "lines": [
       { text: <string>, start_frame_number: }
     ]
+  }
 }
 

@@ -3,4 +3,6 @@ tmp/
 *.mp4
 *.m4v
 *.MOV
+.git/
+
 
