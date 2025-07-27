@@ -1,24 +1,51 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import api from '../services/api';
+
+// Get API base URL from environment
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 export default function HomeScreen({ navigation }) {
   const [backendStatus, setBackendStatus] = useState('Checking...');
   const [isConnected, setIsConnected] = useState(false);
+  const [apiUrl, setApiUrl] = useState('');
+  const [errorDetails, setErrorDetails] = useState('');
 
   useEffect(() => {
     testBackendConnection();
   }, []);
 
   const testBackendConnection = async () => {
+    // Use the API service to get the proper base URL
+    const baseUrl = API_BASE_URL || 'http://localhost:8000/api/v1';
+    const healthUrl = baseUrl.replace('/api/v1', '/health');
+    setApiUrl(healthUrl);
+    
     try {
-      const response = await fetch('http://localhost:8000/health');
-      const data = await response.json();
-      setBackendStatus(`Connected - ${data.service}`);
-      setIsConnected(true);
+      console.log('Testing connection to:', healthUrl);
+      const response = await fetch(healthUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setBackendStatus(`Connected`);
+        setIsConnected(true);
+        setErrorDetails('');
+      } else {
+        setBackendStatus('Backend error');
+        setIsConnected(false);
+        setErrorDetails(`HTTP ${response.status}`);
+      }
     } catch (error) {
+      console.error('Connection error:', error);
       setBackendStatus('Backend unavailable');
       setIsConnected(false);
+      setErrorDetails(error.message || 'Network error');
     }
   };
 
@@ -43,6 +70,8 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.statusTitle}>System Status</Text>
         </View>
         <Text style={styles.statusText}>{backendStatus}</Text>
+        <Text style={styles.apiUrlText}>API: {apiUrl}</Text>
+        {errorDetails ? <Text style={styles.errorText}>Error: {errorDetails}</Text> : null}
         <TouchableOpacity style={styles.refreshButton} onPress={testBackendConnection}>
           <Text style={styles.refreshButtonText}>Refresh</Text>
         </TouchableOpacity>
@@ -139,7 +168,18 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 15,
+    marginBottom: 5,
+  },
+  apiUrlText: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 5,
+    fontFamily: 'Menlo',
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#FF3B30',
+    marginBottom: 10,
   },
   refreshButton: {
     backgroundColor: '#F2F2F7',
