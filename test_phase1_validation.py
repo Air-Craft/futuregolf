@@ -242,7 +242,7 @@ class Phase1Validator:
             self.results.append("❌ Backend requirements.txt not found")
         
         # Check if virtual environment exists
-        venv = self.project_root / "backend/venv"
+        venv = self.project_root / "backend/.venv"
         if venv.exists():
             self.results.append("✅ Backend virtual environment exists")
         else:

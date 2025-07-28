@@ -8,12 +8,12 @@ A modern golf management system API built with FastAPI.
 
 ```bash
 # Create virtual environment
-python3 -m venv venv
+python3 -m .venv .venv
 
 # Activate virtual environment
-source venv/bin/activate  # On macOS/Linux
+source .venv/bin/activate  # On macOS/Linux
 # or
-venv\Scripts\activate     # On Windows
+.venv\Scripts\activate     # On Windows
 ```
 
 ### 2. Install Dependencies
@@ -69,7 +69,7 @@ backend/
 ├── requirements.txt     # Python dependencies
 ├── .env.example        # Environment variables template
 ├── start_server.py     # Server startup script
-├── venv/              # Virtual environment (ignored in git)
+├── .venv/              # Virtual environment (ignored in git)
 └── README.md          # This file
 ```
 
@@ -83,7 +83,7 @@ The backend includes a comprehensive test that processes a golf swing video thro
 
 ```bash
 cd backend
-source venv/bin/activate
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 

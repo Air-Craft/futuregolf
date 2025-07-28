@@ -22,7 +22,8 @@ __pycache__/
 .Python
 env/
 venv/
-backend/venv/
+backend/.venv
+backend/venv
 .venv
 pip-log.txt
 pip-delete-this-directory.txt

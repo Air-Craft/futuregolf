@@ -39,7 +39,10 @@
       "Bash(ffprobe:*)",
       "Bash(rg:*)",
       "Bash(osascript:*)",
-      "Bash(say:*)"
+      "Bash(say:*)",
+      "Bash(npm run analyze-video:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs"
     ],
     "deny": []
   },

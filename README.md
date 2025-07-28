@@ -24,7 +24,7 @@ npm start
 make setup
 
 # Or manually:
-cd backend && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt
+cd backend && python -m ..venv ..venv && source ..venv/bin/activate && pip install -r requirements.txt
 cd ../frontend && npm install
 ```
 
@@ -36,7 +36,7 @@ cd ../frontend && npm install
 make backend
 
 # Option 2: Direct
-cd backend && source venv/bin/activate && python start_server.py
+cd backend && source ..venv/bin/activate && python start_server.py
 ```
 
 ### Frontend Only

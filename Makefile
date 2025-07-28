@@ -13,7 +13,7 @@ start:
 # Start backend only
 backend:
 	@echo "🔧 Starting backend..."
-	@cd backend && source venv/bin/activate && python start_server.py
+	@cd backend && source .venv/bin/activate && python start_server.py
 
 # Start frontend only
 frontend:
@@ -23,20 +23,20 @@ frontend:
 # Setup development environment
 setup:
 	@echo "⚙️ Setting up development environment..."
-	@cd backend && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt
+	@cd backend && python -m .venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 	@cd frontend && npm install
 	@echo "✅ Setup complete!"
 
 # Install dependencies
 install:
 	@echo "📦 Installing dependencies..."
-	@cd backend && source venv/bin/activate && pip install -r requirements.txt
+	@cd backend && source .venv/bin/activate && pip install -r requirements.txt
 	@cd frontend && npm install
 
 # Update requirements.txt using pipreqs
 update-reqs:
 	@echo "📝 Updating backend/requirements.txt with pipreqs..."
-	@bash -c "cd backend && source venv/bin/activate && pip install pipreqs && pipreqs . --force"
+	@bash -c "cd backend && source .venv/bin/activate && pip install pipreqs && pipreqs . --force"
 	@echo "✅ requirements.txt updated."
 
 # Clean up processes

@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
     from google import genai
-    from google.genai.types import HarmCategory, HarmBlockThreshold
+    from google.genai import types
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
@@ -49,18 +49,31 @@ class VideoAnalyzer:
         # Configure Gemini AI with new v2 API
         self.client = genai.Client(api_key=self.gemini_api_key)
         
-        # Safety settings
-        self.safety_settings = {
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-        }
+        # Safety settings - using new API format
+        self.safety_settings = [
+            types.SafetySetting(
+                category='HARM_CATEGORY_HATE_SPEECH',
+                threshold='BLOCK_MEDIUM_AND_ABOVE'
+            ),
+            types.SafetySetting(
+                category='HARM_CATEGORY_DANGEROUS_CONTENT',
+                threshold='BLOCK_MEDIUM_AND_ABOVE'
+            ),
+            types.SafetySetting(
+                category='HARM_CATEGORY_SEXUALLY_EXPLICIT',
+                threshold='BLOCK_MEDIUM_AND_ABOVE'
+            ),
+            types.SafetySetting(
+                category='HARM_CATEGORY_HARASSMENT',
+                threshold='BLOCK_MEDIUM_AND_ABOVE'
+            ),
+        ]
         
         # Generation config
-        self.generation_config = {
-            "response_mime_type": "application/json"
-        }
+        self.generation_config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            safety_settings=self.safety_settings
+        )
         
         print(f"✅ Gemini AI initialized successfully with model: {self.model_name}")
     
@@ -131,7 +144,7 @@ class VideoAnalyzer:
             print(f"📤 Uploading video to Gemini ({os.path.getsize(video_path) / 1024 / 1024:.1f}MB)...")
             upload_start = time.time()
             
-            video_file = await self.client.aio.files.upload(path=video_path)
+            video_file = await self.client.aio.files.upload(file=video_path)
             
             # Wait for processing
             processing_count = 0
@@ -170,8 +183,7 @@ class VideoAnalyzer:
                 response = await self.client.aio.models.generate_content(
                     model=self.model_name,
                     contents=[video_file, enhanced_prompt],
-                    config=self.generation_config,
-                    safety_settings=self.safety_settings
+                    config=self.generation_config
                 )
                 print("✅ Gemini API call completed successfully")
             except Exception as api_error:
