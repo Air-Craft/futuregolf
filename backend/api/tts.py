@@ -232,6 +232,64 @@ async def generate_tts(request: TTSRequest):
             detail="An unexpected error occurred during TTS generation"
         )
 
+@router.post("/coaching")
+async def generate_coaching_tts(request: TTSRequest):
+    """
+    Generate TTS audio optimized for golf coaching feedback
+    
+    Uses optimized voice settings for clear, professional coaching delivery.
+    """
+    try:
+        # Check if OpenAI client is available
+        if client is None:
+            raise HTTPException(
+                status_code=503,
+                detail="TTS service unavailable. OpenAI API key not configured."
+            )
+        
+        # Override with coaching-optimized settings
+        coaching_voice = "onyx"  # Deep, authoritative male voice
+        coaching_model = "tts-1-hd"  # Higher quality
+        coaching_speed = 1.2  # Balanced speed for energy and clarity
+        
+        logger.info(f"Generating coaching TTS for {len(request.text)} characters")
+        
+        # Generate speech with coaching settings
+        response = client.audio.speech.create(
+            model=coaching_model,
+            voice=coaching_voice,
+            input=request.text,
+            speed=coaching_speed,
+            response_format="mp3"
+        )
+        
+        # Get all audio data
+        audio_data = response.content
+        
+        return Response(
+            content=audio_data,
+            media_type="audio/mpeg",
+            headers={
+                "Content-Length": str(len(audio_data)),
+                "X-TTS-Voice": coaching_voice,
+                "X-TTS-Model": coaching_model,
+                "X-TTS-Type": "coaching",
+            }
+        )
+        
+    except openai.APIError as e:
+        logger.error(f"OpenAI API error in coaching TTS: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Coaching TTS generation failed: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in coaching TTS: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred during coaching TTS generation"
+        )
+
 @router.get("/health")
 async def tts_health_check():
     """

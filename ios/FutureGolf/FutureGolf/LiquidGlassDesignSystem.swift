@@ -225,6 +225,19 @@ struct LiquidGlassCard<Content: View>: View {
     var glassIntensity: LiquidGlassBackgroundModifier.GlassIntensity = .medium
     var depthLevel: DepthLayerModifier.DepthLevel = .raised
     
+    init(
+            cornerRadius: CGFloat = 16,
+            glassIntensity: LiquidGlassBackgroundModifier.GlassIntensity = .medium,
+            depthLevel: DepthLayerModifier.DepthLevel = .raised,
+            @ViewBuilder content: @escaping () -> Content
+        ) {
+            self.cornerRadius = cornerRadius
+            self.glassIntensity = glassIntensity
+            self.depthLevel = depthLevel
+            self.content = content
+        }
+
+    
     var body: some View {
         content()
             .liquidGlassBackground(intensity: glassIntensity, cornerRadius: cornerRadius)

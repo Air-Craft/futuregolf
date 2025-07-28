@@ -7,6 +7,7 @@ struct HomeView: View {
     @State private var selectedVideoURL: URL?
     @State private var showAnalysisView = false
     @State private var showDemoVideo = false
+    @State private var showCoachingVideo = false
     @State private var viewModel = VideoAnalysisViewModel()
     @State private var player: AVPlayer?
     
@@ -40,18 +41,12 @@ struct HomeView: View {
                         .animation(.spring(response: 0.7, dampingFraction: 0.8).delay(0.1), value: animateContent)
                     
                     // Recent Analysis Preview
-                    if viewModel.hasRecentAnalysis {
+                    if false { // Temporarily hidden to make space
                         recentAnalysisSection
                             .opacity(animateContent ? 1 : 0)
                             .offset(y: animateContent ? 0 : 40)
                             .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.2), value: animateContent)
                     }
-                    
-                    // Tips Section
-                    tipsSection
-                        .opacity(animateContent ? 1 : 0)
-                        .offset(y: animateContent ? 0 : 50)
-                        .animation(.spring(response: 0.9, dampingFraction: 0.8).delay(0.3), value: animateContent)
                     }
                     .padding()
                 }
@@ -87,6 +82,10 @@ struct HomeView: View {
                     animateContent = true
                 }
                 setupBackgroundVideo()
+                // Automatically present coaching video for testing
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    showCoachingVideo = true
+                }
             }
             .sheet(isPresented: $showDemoVideo) {
                 NavigationStack {
@@ -107,6 +106,19 @@ struct HomeView: View {
                             }
                         }
                     }
+                }
+            }
+            .sheet(isPresented: $showCoachingVideo) {
+                NavigationStack {
+                    CoachingVideoView()
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button("Done") {
+                                    showCoachingVideo = false
+                                }
+                            }
+                        }
                 }
             }
         }
@@ -233,6 +245,40 @@ struct HomeView: View {
             }
             .buttonStyle(LiquidGlassButtonStyle(isProminent: true))
             
+            // Temporary Coaching Video Button (BRIGHT RED FOR TESTING)
+            NavigationLink(destination: CoachingVideoView()) {
+                HStack {
+                    Image(systemName: "video.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("🎥 COACHING VIDEO")
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        Text("TEST BUTTON - TAP HERE")
+                            .font(.caption)
+                            .foregroundColor(.white)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("TEMP")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.yellow)
+                        .foregroundColor(.black)
+                        .cornerRadius(8)
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(Color.red)
+                .cornerRadius(12)
+            }
+            
             // Secondary Actions
             HStack(spacing: 16) {
                 NavigationLink(destination: PreviousAnalysesView()) {
@@ -273,6 +319,34 @@ struct HomeView: View {
                 }
                 .buttonStyle(LiquidGlassButtonStyle(isProminent: false))
             }
+            
+            // Demo Video Playback Button (Fourth Button)
+            Button(action: {
+                showCoachingVideo = true
+                HapticManager.impact(.medium)
+            }) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("🎬 Demo Video Playback", systemImage: "play.tv.fill")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                        
+                        Text("Test video with TTS coaching")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.largeTitle)
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.tint)
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(LiquidGlassButtonStyle(isProminent: true))
             
             // Demo Button (for testing)
             Button(action: {

@@ -13,28 +13,27 @@ struct ContentView: View {
                     // Video Preview Section
                     if let videoURL = viewModel.selectedVideoURL {
                         LiquidGlassCard(
-                            content: {
-                                VideoPlayer(player: AVPlayer(url: videoURL))
-                                    .frame(height: 300)
-                                    .overlay(alignment: .topTrailing) {
-                                        // Video info overlay
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "video.fill")
-                                                .font(.caption)
-                                            Text("Ready to Analyze")
-                                                .font(.caption)
-                                                .fontWeight(.medium)
-                                        }
-                                        .foregroundColor(.white)
-                                        .padding(8)
-                                        .background(.ultraThinMaterial, in: Capsule())
-                                        .padding(12)
-                                    }
-                            },
                             cornerRadius: 20,
                             glassIntensity: .ultraLight,
                             depthLevel: .elevated
-                        )
+                        ){
+                            VideoPlayer(player: AVPlayer(url: videoURL))
+                                .frame(height: 300)
+                                .overlay(alignment: .topTrailing) {
+                                    // Video info overlay
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "video.fill")
+                                            .font(.caption)
+                                        Text("Ready to Analyze")
+                                            .font(.caption)
+                                            .fontWeight(.medium)
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(8)
+                                    .background(.ultraThinMaterial, in: Capsule())
+                                    .padding(12)
+                                }
+                        }
                         .padding(.horizontal)
                         .liquidGlassTransition(isVisible: showVideoPreview)
                         .onAppear {

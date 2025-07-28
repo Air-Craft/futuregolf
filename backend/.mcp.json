@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "ios-simulator": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@joshuarileydev/simulator-mcp-server"
+      ],
+      "env": {}
+    },
+    "neon": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "mcp-remote@latest",
+        "https://mcp.neon.tech/sse"
+      ],
+      "env": {}
+    }
+  }
+}

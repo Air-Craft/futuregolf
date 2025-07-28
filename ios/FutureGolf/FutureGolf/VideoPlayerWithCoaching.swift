@@ -87,7 +87,7 @@ struct VideoPlayerWithCoaching: View {
             HStack {
                 // Current Phase Indicator
                 if let currentPhase = playerViewModel.currentPhase {
-                    LiquidGlassCard {
+                    LiquidGlassCard(glassIntensity: .heavy) {
                         HStack(spacing: 12) {
                             Image(systemName: phaseIcon(for: currentPhase.name))
                                 .font(.title2)

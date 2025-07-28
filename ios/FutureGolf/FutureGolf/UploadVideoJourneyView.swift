@@ -335,14 +335,16 @@ struct UploadVideoJourneyView: View {
             }
             
             // Progress bar
-            if viewModel.uploadProgress > 0 {
-                ProgressView(value: viewModel.uploadProgress) {
-                    Text(viewModel.uploadStatus)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            VStack {
+                if viewModel.uploadProgress > 0 {
+                    ProgressView(value: viewModel.uploadProgress) {
+                        Text(viewModel.uploadStatus)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .progressViewStyle(.linear)
+                    .tint(.fairwayGreen)
                 }
-                .progressViewStyle(.linear)
-                .tint(.fairwayGreen)
             }
             .padding()
             .liquidGlassBackground(intensity: .light, cornerRadius: 16)
@@ -406,7 +408,7 @@ struct UploadVideoJourneyView: View {
                             case .networkUnavailable:
                                 // Open settings
                                 if let url = URL(string: UIApplication.openSettingsURLString) {
-                                    UIApplication.shared.open(url)
+                                    await UIApplication.shared.open(url)
                                 }
                             case .serverError, .timeout:
                                 await viewModel.retryUpload()

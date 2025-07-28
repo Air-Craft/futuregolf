@@ -11,6 +11,9 @@ struct AnalysisResultView: View {
             VStack(spacing: 24) {
                 // Header Section with Score
                 LiquidGlassCard(
+                    cornerRadius: 24,
+                    glassIntensity: .medium,
+                    depthLevel: .elevated,
                     content: {
                         VStack(spacing: 16) {
                             // Swing Score Visual
@@ -49,10 +52,7 @@ struct AnalysisResultView: View {
                         }
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity)
-                    },
-                    cornerRadius: 24,
-                    glassIntensity: .medium,
-                    depthLevel: .elevated
+                    }
                 )
                 .padding(.horizontal)
                 .liquidGlassTransition(isVisible: showContent)
@@ -119,14 +119,14 @@ struct AnalysisResultView: View {
                         .foregroundColor(.glassText)
                     
                     LiquidGlassCard(
+                        cornerRadius: 16,
+                        glassIntensity: .light,
                         content: {
                             Text(result.overallAnalysis)
                                 .font(.body)
                                 .foregroundColor(.glassText)
                                 .padding()
-                        },
-                        cornerRadius: 16,
-                        glassIntensity: .light
+                        }
                     )
                 }
                 .padding(.horizontal)
