@@ -7,3 +7,21 @@ tmp/
 
 
 .DS_Store
+
+# Xcode build directories
+ios/FutureGolf/build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt

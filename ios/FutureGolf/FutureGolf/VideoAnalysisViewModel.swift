@@ -12,6 +12,13 @@ class VideoAnalysisViewModel {
     var showError = false
     var errorMessage = ""
     
+    // Properties for HomeView
+    var hasRecentAnalysis: Bool {
+        lastAnalysisResult != nil
+    }
+    var lastAnalysisDate: Date?
+    var lastAnalysisResult: AnalysisResult?
+    
     private let apiClient = APIClient()
     
     func loadVideo(from item: PhotosPickerItem?) async {
@@ -41,6 +48,11 @@ class VideoAnalysisViewModel {
         }
         
         isUploading = false
+    }
+    
+    func loadLastAnalysis() {
+        // In a real app, this would load from persistent storage
+        analysisResult = lastAnalysisResult
     }
 }
 
