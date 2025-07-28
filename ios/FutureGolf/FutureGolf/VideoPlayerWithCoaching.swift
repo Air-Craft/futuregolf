@@ -11,6 +11,7 @@ struct VideoPlayerWithCoaching: View {
     @State private var isCoachingEnabled = true
     @State private var currentPhaseIndex = 0
     @State private var showPhaseOverlay = true
+    @AppStorage("coachingAutoPlay") private var coachingAutoPlay = true
     @State private var playbackSpeed: Float = 1.0
     @State private var showControls = true
     @State private var hideControlsTimer: Timer?
@@ -27,6 +28,7 @@ struct VideoPlayerWithCoaching: View {
                 }
                 .onAppear {
                     playerViewModel.setupPlayer(with: videoURL, analysisResult: analysisResult)
+                    isCoachingEnabled = coachingAutoPlay
                 }
                 .onDisappear {
                     playerViewModel.cleanup()
@@ -393,6 +395,31 @@ class VideoPlayerViewModel {
         jumpToPhase(currentPhaseIndex)
     }
     
+    func testCoaching(for phaseIndex: Int? = nil) {
+        guard let phases = analysisResult?.swingPhases else { return }
+        
+        let index = phaseIndex ?? currentPhaseIndex
+        guard index >= 0, index < phases.count else { return }
+        
+        let phase = phases[index]
+        speakFeedback(phase.feedback)
+        
+        // Also show visual feedback
+        withAnimation {
+            currentFeedback = phase.feedback
+        }
+        
+        // Hide feedback after speech duration estimate
+        let wordCount = phase.feedback.split(separator: " ").count
+        let estimatedDuration = Double(wordCount) * 0.15 + 2.0  // Rough estimate
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + estimatedDuration) { [weak self] in
+            withAnimation {
+                self?.currentFeedback = nil
+            }
+        }
+    }
+    
     func jumpToPhase(_ index: Int) {
         guard let phases = analysisResult?.swingPhases,
               index >= 0,
@@ -448,10 +475,32 @@ class VideoPlayerViewModel {
     private func setupCoaching() {
         synthesizer.delegate = nil
         
-        // Configure voice
-        if let voice = AVSpeechSynthesisVoice(language: "en-US") {
-            // Use a specific voice if available
-            synthesizer.stopSpeaking(at: .immediate)
+        // Configure voice - prefer enhanced voices for better quality
+        let preferredVoices = [
+            "com.apple.voice.enhanced.en-US.Ava",
+            "com.apple.voice.premium.en-US.Zoe",
+            "com.apple.ttsbundle.Samantha-compact",
+            "com.apple.ttsbundle.siri_female_en-US_compact"
+        ]
+        
+        var selectedVoice: AVSpeechSynthesisVoice?
+        
+        // Try to find a preferred voice
+        for voiceIdentifier in preferredVoices {
+            if let voice = AVSpeechSynthesisVoice(identifier: voiceIdentifier) {
+                selectedVoice = voice
+                break
+            }
+        }
+        
+        // Fallback to default US English voice
+        if selectedVoice == nil {
+            selectedVoice = AVSpeechSynthesisVoice(language: "en-US")
+        }
+        
+        // Store the selected voice for consistent use
+        if let voice = selectedVoice {
+            UserDefaults.standard.set(voice.identifier, forKey: "preferredCoachingVoice")
         }
     }
     
@@ -482,12 +531,23 @@ class VideoPlayerViewModel {
         synthesizer.stopSpeaking(at: .word)
         
         let utterance = AVSpeechUtterance(string: text)
-        utterance.rate = 0.5
-        utterance.pitchMultiplier = 1.0
+        
+        // Configurable speech rate (stored in UserDefaults)
+        let speechRate = UserDefaults.standard.float(forKey: "coachingSpeechRate")
+        utterance.rate = speechRate > 0 ? speechRate : 0.48  // Slightly slower than default
+        
+        utterance.pitchMultiplier = 1.05  // Slightly higher pitch for clarity
         utterance.volume = 0.9
         
-        // Use a preferred voice
-        if let voice = AVSpeechSynthesisVoice(language: "en-US") {
+        // Add pre and post utterance delays for better timing
+        utterance.preUtteranceDelay = 0.2
+        utterance.postUtteranceDelay = 0.3
+        
+        // Use the stored preferred voice
+        if let voiceIdentifier = UserDefaults.standard.string(forKey: "preferredCoachingVoice"),
+           let voice = AVSpeechSynthesisVoice(identifier: voiceIdentifier) {
+            utterance.voice = voice
+        } else if let voice = AVSpeechSynthesisVoice(language: "en-US") {
             utterance.voice = voice
         }
         

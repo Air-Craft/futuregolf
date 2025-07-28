@@ -25,7 +25,11 @@ struct UploadVideoJourneyView: View {
                     case 2:
                         videoPreviewStep
                     case 3:
-                        uploadingStep
+                        if viewModel.showError {
+                            errorView
+                        } else {
+                            uploadingStep
+                        }
                     default:
                         EmptyView()
                     }
@@ -324,10 +328,21 @@ struct UploadVideoJourneyView: View {
             
             // Status Messages
             VStack(alignment: .leading, spacing: 12) {
-                statusRow(text: "Uploading video", isComplete: true)
-                statusRow(text: "Processing frames", isComplete: true)
-                statusRow(text: "Analyzing swing mechanics", isComplete: false)
-                statusRow(text: "Generating coaching tips", isComplete: false)
+                statusRow(text: "Uploading video", isComplete: viewModel.uploadProgress > 0.2)
+                statusRow(text: "Processing frames", isComplete: viewModel.uploadProgress > 0.4)
+                statusRow(text: "Analyzing swing mechanics", isComplete: viewModel.uploadProgress > 0.6)
+                statusRow(text: "Generating coaching tips", isComplete: viewModel.uploadProgress > 0.8)
+            }
+            
+            // Progress bar
+            if viewModel.uploadProgress > 0 {
+                ProgressView(value: viewModel.uploadProgress) {
+                    Text(viewModel.uploadStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .progressViewStyle(.linear)
+                .tint(.fairwayGreen)
             }
             .padding()
             .liquidGlassBackground(intensity: .light, cornerRadius: 16)
@@ -340,6 +355,121 @@ struct UploadVideoJourneyView: View {
         }
         .onDisappear {
             isAnalyzing = false
+        }
+    }
+    
+    private var errorView: some View {
+        VStack(spacing: 24) {
+            // Error Icon
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 60))
+                .symbolRenderingMode(.multicolor)
+                .foregroundStyle(.red)
+            
+            VStack(spacing: 12) {
+                Text("Upload Failed")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+                Text(viewModel.errorMessage)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            
+            // Error Details Card
+            if let error = viewModel.currentError {
+                LiquidGlassCard {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Label("What to do:", systemImage: "lightbulb")
+                            .font(.headline)
+                            .foregroundColor(.glassText)
+                        
+                        Text(getErrorSuggestion(for: error))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding()
+                }
+                .padding(.horizontal)
+            }
+            
+            Spacer()
+            
+            // Action Buttons
+            VStack(spacing: 12) {
+                if let error = viewModel.currentError {
+                    Button(action: {
+                        Task {
+                            switch error {
+                            case .networkUnavailable:
+                                // Open settings
+                                if let url = URL(string: UIApplication.openSettingsURLString) {
+                                    UIApplication.shared.open(url)
+                                }
+                            case .serverError, .timeout:
+                                await viewModel.retryUpload()
+                                withAnimation {
+                                    currentStep = 3
+                                }
+                            case .invalidVideo, .fileTooLarge:
+                                withAnimation {
+                                    currentStep = 0
+                                    viewModel.selectedVideoURL = nil
+                                }
+                            case .unauthorized:
+                                // Handle sign in
+                                dismiss()
+                            }
+                        }
+                        HapticManager.impact(.medium)
+                    }) {
+                        Label(viewModel.currentError?.recoveryAction ?? "Try Again", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(LiquidGlassButtonStyle(isProminent: true))
+                }
+                
+                Button(action: {
+                    withAnimation {
+                        currentStep = 0
+                        viewModel.selectedVideoURL = nil
+                        viewModel.showError = false
+                    }
+                    HapticManager.impact(.light)
+                }) {
+                    Text("Choose Different Video")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(LiquidGlassButtonStyle(isProminent: false))
+                
+                Button(action: {
+                    dismiss()
+                }) {
+                    Text("Cancel")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal)
+        }
+        .padding()
+    }
+    
+    private func getErrorSuggestion(for error: UploadError) -> String {
+        switch error {
+        case .networkUnavailable:
+            return "Check your Wi-Fi or cellular connection and try again. For best results, use a stable Wi-Fi connection."
+        case .serverError:
+            return "Our servers are experiencing issues. Please try again in a few minutes."
+        case .timeout:
+            return "The upload took too long. Try with a smaller video or better internet connection."
+        case .invalidVideo:
+            return "Please select a video in MP4 or MOV format. The video should show a clear view of your golf swing."
+        case .fileTooLarge:
+            return "Try recording a shorter video (under 30 seconds) or reduce the video quality in your camera settings."
+        case .unauthorized:
+            return "You need to sign in to upload and analyze videos. Go to Settings to sign in."
         }
     }
     

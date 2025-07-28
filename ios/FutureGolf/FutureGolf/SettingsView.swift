@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 struct SettingsView: View {
     @AppStorage("apiEndpoint") private var apiEndpoint = "http://192.168.1.114:8000"
@@ -7,6 +8,9 @@ struct SettingsView: View {
     @AppStorage("enableHaptics") private var enableHaptics = true
     @AppStorage("autoAnalyze") private var autoAnalyze = false
     @AppStorage("saveAnalysisHistory") private var saveAnalysisHistory = true
+    @AppStorage("coachingSpeechRate") private var coachingSpeechRate: Double = 0.48
+    @AppStorage("coachingAutoPlay") private var coachingAutoPlay = true
+    @AppStorage("coachingVoiceGender") private var coachingVoiceGender = "female"
     
     @State private var showingSignIn = false
     @State private var isSignedIn = false
@@ -172,6 +176,79 @@ struct SettingsView: View {
                     )
                     .padding(.horizontal)
                     
+                    // Coaching Settings
+                    LiquidGlassCard(
+                        content: {
+                            VStack(alignment: .leading, spacing: 16) {
+                                Label("Coaching Settings", systemImage: "speaker.wave.3")
+                                    .font(.headline)
+                                    .foregroundColor(.glassText)
+                                
+                                VStack(alignment: .leading, spacing: 16) {
+                                    // Speech Rate Slider
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Image(systemName: "hare")
+                                                .foregroundColor(.glassSecondaryText)
+                                            Text("Speech Rate")
+                                                .font(.subheadline)
+                                                .foregroundColor(.glassText)
+                                            Spacer()
+                                            Text(String(format: "%.1fx", coachingSpeechRate))
+                                                .font(.caption)
+                                                .foregroundColor(.glassSecondaryText)
+                                        }
+                                        
+                                        Slider(value: $coachingSpeechRate, in: 0.3...0.7, step: 0.05)
+                                            .tint(.fairwayGreen)
+                                    }
+                                    
+                                    Divider()
+                                        .background(Color.glassSeparator)
+                                    
+                                    // Auto-play coaching toggle
+                                    SettingsToggleRow(
+                                        title: "Auto-play Coaching",
+                                        subtitle: "Automatically speak feedback during playback",
+                                        icon: "play.circle",
+                                        isOn: $coachingAutoPlay
+                                    )
+                                    
+                                    // Voice Gender Picker
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Image(systemName: "person.wave.2")
+                                                .foregroundColor(.glassSecondaryText)
+                                            Text("Voice Type")
+                                                .font(.subheadline)
+                                                .foregroundColor(.glassText)
+                                        }
+                                        
+                                        Picker("Voice Type", selection: $coachingVoiceGender) {
+                                            Text("Female").tag("female")
+                                            Text("Male").tag("male")
+                                        }
+                                        .pickerStyle(.segmented)
+                                    }
+                                    
+                                    // Test Coaching Button
+                                    Button(action: testCoachingVoice) {
+                                        HStack {
+                                            Image(systemName: "play.fill")
+                                            Text("Test Coaching Voice")
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(LiquidGlassButtonStyle(isProminent: false))
+                                }
+                            }
+                            .padding()
+                        },
+                        cornerRadius: 16,
+                        glassIntensity: .light
+                    )
+                    .padding(.horizontal)
+                    
                     // Account Section
                     LiquidGlassCard(
                         content: {
@@ -257,6 +334,53 @@ struct SettingsView: View {
                 // Sign in view would go here
                 SignInPlaceholder()
             }
+        }
+    }
+    
+    private func testCoachingVoice() {
+        let synthesizer = AVSpeechSynthesizer()
+        let testText = "Great swing! Keep your left arm straight and rotate through your hips for more power."
+        
+        let utterance = AVSpeechUtterance(string: testText)
+        utterance.rate = Float(coachingSpeechRate)
+        utterance.pitchMultiplier = 1.05
+        utterance.volume = 0.9
+        
+        // Select voice based on gender preference
+        let languageCode = "en-US"
+        let voices = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix(languageCode) }
+        
+        if coachingVoiceGender == "female" {
+            // Try to find a female voice
+            if let femaleVoice = voices.first(where: { 
+                $0.identifier.contains("Samantha") || 
+                $0.identifier.contains("Ava") || 
+                $0.identifier.contains("Zoe") ||
+                $0.name.lowercased().contains("female")
+            }) {
+                utterance.voice = femaleVoice
+            } else {
+                utterance.voice = AVSpeechSynthesisVoice(language: languageCode)
+            }
+        } else {
+            // Try to find a male voice
+            if let maleVoice = voices.first(where: { 
+                $0.identifier.contains("Alex") || 
+                $0.identifier.contains("Daniel") || 
+                $0.identifier.contains("Fred") ||
+                $0.name.lowercased().contains("male")
+            }) {
+                utterance.voice = maleVoice
+            } else {
+                utterance.voice = AVSpeechSynthesisVoice(language: languageCode)
+            }
+        }
+        
+        synthesizer.speak(utterance)
+        
+        // Haptic feedback
+        if enableHaptics {
+            LiquidGlassHaptics.impact(.medium)
         }
     }
 }
