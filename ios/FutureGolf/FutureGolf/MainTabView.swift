@@ -5,9 +5,9 @@ struct MainTabView: View {
     
     var body: some View {
         TabView(selection: $selectedTab) {
-            ContentView()
+            HomeView()
                 .tabItem {
-                    Label("Analyze", systemImage: "camera.viewfinder")
+                    Label("Home", systemImage: "house.fill")
                 }
                 .tag(0)
             
@@ -35,7 +35,24 @@ struct MainTabView: View {
                 }
                 .tag(4)
         }
-        .tint(.accentColor)
+        .tint(.fairwayGreen)
+        .onAppear {
+            // Configure tab bar appearance with Liquid Glass style
+            let appearance = UITabBarAppearance()
+            appearance.configureWithDefaultBackground()
+            
+            // iOS 26 enhanced blur effect
+            if #available(iOS 26.0, *) {
+                appearance.backgroundEffect = UIBlurEffect(style: .systemChromeMaterial)
+            } else {
+                appearance.backgroundEffect = UIBlurEffect(style: .systemThinMaterial)
+            }
+            
+            appearance.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.3)
+            
+            UITabBar.appearance().standardAppearance = appearance
+            UITabBar.appearance().scrollEdgeAppearance = appearance
+        }
     }
 }
 

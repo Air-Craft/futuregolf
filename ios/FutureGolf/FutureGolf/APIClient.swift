@@ -1,7 +1,7 @@
 import Foundation
 
 class APIClient {
-    private let baseURL = "http://192.168.1.114:8000/api/v1"
+    private let baseURL = "http://localhost:8000/api/v1"
     private let session = URLSession.shared
     
     func uploadAndAnalyzeVideo(url: URL) async -> AnalysisResult? {
@@ -96,7 +96,10 @@ class APIClient {
                             swingPhases: aiAnalysis.swingPhases,
                             keyPoints: aiAnalysis.keyPoints,
                             overallAnalysis: aiAnalysis.overallAnalysis,
-                            coachingScript: aiAnalysis.coachingScript
+                            coachingScript: aiAnalysis.coachingScript,
+                            swingSpeed: aiAnalysis.swingSpeed,
+                            tempo: aiAnalysis.tempo,
+                            balance: aiAnalysis.balance
                         )
                     } else if analysis.status == "failed" {
                         throw APIError.analysisFailed
@@ -155,33 +158,33 @@ struct AnalysisData: Codable {
         if let setup = firstSwing.phases?.setup {
             phases.append(SwingPhase(
                 name: "Setup",
-                startFrame: setup.start_frame ?? 0,
-                endFrame: setup.end_frame ?? 0,
-                keyObservations: firstSwing.comments ?? []
+                timestamp: setup.start_timestamp ?? 0.0,
+                description: "Initial stance and club positioning",
+                feedback: firstSwing.comments?.first ?? "Good setup position"
             ))
         }
         if let backswing = firstSwing.phases?.backswing {
             phases.append(SwingPhase(
                 name: "Backswing", 
-                startFrame: backswing.start_frame ?? 0,
-                endFrame: backswing.end_frame ?? 0,
-                keyObservations: []
+                timestamp: backswing.start_timestamp ?? 0.0,
+                description: "Club movement to the top of the swing",
+                feedback: "Maintain proper shoulder rotation"
             ))
         }
         if let downswing = firstSwing.phases?.downswing {
             phases.append(SwingPhase(
                 name: "Downswing",
-                startFrame: downswing.start_frame ?? 0,
-                endFrame: downswing.end_frame ?? 0,
-                keyObservations: []
+                timestamp: downswing.start_timestamp ?? 0.0,
+                description: "Transition and acceleration through impact",
+                feedback: "Good hip rotation and weight transfer"
             ))
         }
         if let followThrough = firstSwing.phases?.follow_through {
             phases.append(SwingPhase(
                 name: "Follow Through",
-                startFrame: followThrough.start_frame ?? 0,
-                endFrame: followThrough.end_frame ?? 0,
-                keyObservations: []
+                timestamp: followThrough.start_timestamp ?? 0.0,
+                description: "Post-impact club path and finish position",
+                feedback: "Complete your rotation for better balance"
             ))
         }
         
@@ -215,12 +218,45 @@ struct AnalysisData: Codable {
         guard let lines = coaching_script?.lines else { return "" }
         return lines.map { $0.text }.joined(separator: "\n\n")
     }
+    
+    // Computed metrics
+    var swingSpeed: Int {
+        // Extract swing speed from the first swing's metrics if available
+        // This would typically come from the API, but we'll provide a default for now
+        return swings?.first?.metrics?.clubheadSpeed ?? 85
+    }
+    
+    var tempo: String {
+        // Extract tempo ratio from the first swing's metrics
+        // Format as "X:1" ratio
+        if let backswingTime = swings?.first?.metrics?.backswingTime,
+           let downswingTime = swings?.first?.metrics?.downswingTime,
+           downswingTime > 0 {
+            let ratio = backswingTime / downswingTime
+            return String(format: "%.1f:1", ratio)
+        }
+        return "3:1"
+    }
+    
+    var balance: Int {
+        // Extract balance score from the first swing's metrics
+        // This would be a percentage score
+        return swings?.first?.metrics?.balanceScore ?? 88
+    }
 }
 
 struct SwingAnalysis: Codable {
     let score: Int?
     let phases: SwingPhases?
     let comments: [String]?
+    let metrics: SwingMetrics?
+}
+
+struct SwingMetrics: Codable {
+    let clubheadSpeed: Int?
+    let backswingTime: Double?
+    let downswingTime: Double?
+    let balanceScore: Int?
 }
 
 struct SwingPhases: Codable {
@@ -249,18 +285,4 @@ struct CoachingScript: Codable {
 struct CoachingLine: Codable {
     let text: String
     let start_frame_number: Int
-}
-
-struct SwingPhase: Codable {
-    let name: String
-    let startFrame: Int
-    let endFrame: Int
-    let keyObservations: [String]
-    
-    enum CodingKeys: String, CodingKey {
-        case name
-        case startFrame = "start_frame"
-        case endFrame = "end_frame"
-        case keyObservations = "key_observations"
-    }
 }

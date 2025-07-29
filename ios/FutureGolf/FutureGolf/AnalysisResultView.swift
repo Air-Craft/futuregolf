@@ -2,107 +2,109 @@ import SwiftUI
 
 struct AnalysisResultView: View {
     let result: AnalysisResult
+    @State private var selectedPhaseIndex: Int = 0
+    @State private var showContent = false
+    @State private var showVideoPlayer = false
     
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Golf Swing Analysis")
-                    .font(.largeTitle)
-                    .bold()
-                    .padding(.horizontal)
-                
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Overall Analysis")
-                        .font(.headline)
+            VStack(spacing: 24) {
+                // Simple header
+                VStack(spacing: 16) {
+                    Text("Golf Swing Analysis")
+                        .font(.title2)
+                        .fontWeight(.bold)
                     
-                    Text(result.overallAnalysis)
-                        .font(.body)
-                        .padding()
-                        .background(.regularMaterial)
-                        .backgroundStyle(.quaternary)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    Text("Overall Score: \(calculateOverallScore())")
+                        .font(.headline)
+                        .foregroundColor(.green)
                 }
-                .padding(.horizontal)
+                .padding()
+                .background(Color.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 16))
                 
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Key Points")
-                        .font(.headline)
-                    
-                    ForEach(result.keyPoints, id: \.self) { point in
-                        HStack(alignment: .top) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                            Text(point)
-                                .font(.body)
-                        }
-                        .padding(.vertical, 4)
+                // Simple video button
+                Button(action: {
+                    showVideoPlayer = true
+                }) {
+                    HStack {
+                        Image(systemName: "play.circle.fill")
+                            .font(.title2)
+                        Text("Watch Video with Coaching")
+                            .font(.headline)
+                        Spacer()
                     }
+                    .padding()
+                    .background(Color.blue.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
+                    .foregroundColor(.white)
                 }
-                .padding(.horizontal)
                 
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Swing Phases")
+                // Simple metrics
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Metrics")
                         .font(.headline)
                     
-                    ForEach(result.swingPhases, id: \.name) { phase in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(phase.name)
-                                .font(.subheadline)
-                                .bold()
-                            
-                            Text("Frames: \(phase.startFrame) - \(phase.endFrame)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            
-                            ForEach(phase.keyObservations, id: \.self) { observation in
-                                Text("• \(observation)")
-                                    .font(.body)
-                                    .padding(.leading)
-                            }
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text("Club Speed:")
+                            Spacer()
+                            Text("\(result.swingSpeed) mph")
                         }
-                        .padding()
-                        .background(.thinMaterial)
-                        .backgroundStyle(.blue)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        HStack {
+                            Text("Tempo:")
+                            Spacer()
+                            Text(result.tempo)
+                        }
+                        HStack {
+                            Text("Balance:")
+                            Spacer()
+                            Text("\(result.balance)%")
+                        }
                     }
+                    .padding()
+                    .background(Color.gray.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
                 }
                 .padding(.horizontal)
-                
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Coaching Feedback")
-                        .font(.headline)
-                    
-                    Text(result.coachingScript)
-                        .font(.body)
-                        .padding()
-                        .background(.ultraThinMaterial)
-                        .backgroundStyle(.purple)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                .padding(.horizontal)
-                .padding(.bottom)
             }
         }
-        .navigationBarTitleDisplayMode(.inline)
+        .background(Color.black)
+        .foregroundColor(.white)
+        .sheet(isPresented: $showVideoPlayer) {
+            NavigationStack {
+                if let videoURL = Bundle.main.url(forResource: "golf1", withExtension: "mp4") {
+                    VideoPlayerWithCoaching(
+                        analysisResult: result,
+                        videoURL: videoURL
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button("Done") {
+                                showVideoPlayer = false
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private func calculateOverallScore() -> Int {
+        let speedScore = min(100, result.swingSpeed * 100 / 120)
+        let balanceScore = result.balance
+        let tempoScore = result.tempo == "3:1" ? 100 : 85
+        return (speedScore + balanceScore + tempoScore) / 3
     }
 }
 
 #Preview {
-    NavigationStack {
-        AnalysisResultView(result: AnalysisResult(
-            id: "123",
-            status: "completed",
-            swingPhases: [
-                SwingPhase(
-                    name: "Backswing",
-                    startFrame: 10,
-                    endFrame: 45,
-                    keyObservations: ["Good rotation", "Maintains spine angle"]
-                )
-            ],
-            keyPoints: ["Great tempo", "Good balance throughout swing"],
-            overallAnalysis: "Your golf swing shows excellent fundamentals with room for minor improvements.",
-            coachingScript: "Let's work on your follow-through to maximize distance."
-        ))
-    }
+    AnalysisResultView(result: AnalysisResult(
+        id: "123",
+        status: "completed",
+        swingPhases: [],
+        keyPoints: ["Great tempo", "Good balance"],
+        overallAnalysis: "Excellent fundamentals",
+        coachingScript: "Keep up the good work",
+        swingSpeed: 92,
+        tempo: "3:1",
+        balance: 88
+    ))
 }

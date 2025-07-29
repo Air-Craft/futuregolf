@@ -64,12 +64,12 @@ print_status "Starting backend server..."
 
 # Start backend in background
 cd backend
-if [ ! -d "venv" ]; then
-    print_error "Virtual environment not found. Please run: cd backend && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt"
+if [ ! -d ".venv" ]; then
+    print_error "Virtual environment not found. Please run: cd backend && python -m .venv .venv && source .venv/bin/activate && pip install -r requirements.txt"
     exit 1
 fi
 
-source venv/bin/activate
+source .venv/bin/activate
 python start_server.py &
 BACKEND_PID=$!
 

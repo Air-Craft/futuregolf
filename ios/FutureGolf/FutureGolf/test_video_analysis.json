@@ -1,0 +1,152 @@
+{
+  "swings": [
+    {
+      "score": 5,
+      "phases": {
+        "setup": {
+          "start_frame": 90,
+          "end_frame": 150
+        },
+        "backswing": {
+          "start_frame": 150,
+          "end_frame": 180
+        },
+        "downswing": {
+          "start_frame": 180,
+          "end_frame": 210
+        },
+        "follow_through": {
+          "start_frame": 210,
+          "end_frame": 240
+        }
+      },
+      "comments": [
+        "Maintain a stable head position throughout the swing.",
+        "Focus on a fuller rotation in the follow-through."
+      ]
+    },
+    {
+      "score": 5,
+      "phases": {
+        "setup": {
+          "start_frame": 300,
+          "end_frame": 390
+        },
+        "backswing": {
+          "start_frame": 390,
+          "end_frame": 420
+        },
+        "downswing": {
+          "start_frame": 420,
+          "end_frame": 450
+        },
+        "follow_through": {
+          "start_frame": 450,
+          "end_frame": 480
+        }
+      },
+      "comments": [
+        "Reduce lateral sway in the backswing.",
+        "Aim for a more complete hip and chest rotation in the finish."
+      ]
+    },
+    {
+      "score": 6,
+      "phases": {
+        "setup": {
+          "start_frame": 540,
+          "end_frame": 600
+        },
+        "backswing": {
+          "start_frame": 600,
+          "end_frame": 630
+        },
+        "downswing": {
+          "start_frame": 630,
+          "end_frame": 660
+        },
+        "follow_through": {
+          "start_frame": 660,
+          "end_frame": 690
+        }
+      },
+      "comments": [
+        "Keep your left arm straighter through impact.",
+        "Let your hips lead the downswing more actively."
+      ]
+    }
+  ],
+  "summary": {
+    "highlights": [
+      "Good club head speed demonstrated.",
+      "Consistent tempo, especially on the last swing.",
+      "Solid contact achieved on the final swing."
+    ],
+    "improvements": [
+      "Improve lower body stability during the backswing to minimize sway.",
+      "Increase body rotation through impact to enhance power and consistency.",
+      "Work on maintaining a straighter lead arm through the impact zone."
+    ]
+  },
+  "coaching_script": {
+    "lines": [
+      {
+        "text": "Alright, let's take a look at your golf swing.",
+        "start_frame_number": 0
+      },
+      {
+        "text": "Starting with your setup, try to maintain a consistent spine angle.",
+        "start_frame_number": 60
+      },
+      {
+        "text": "In your backswing, aim for a more stable lower body to avoid any lateral sway.",
+        "start_frame_number": 150
+      },
+      {
+        "text": "Through impact, focus on rotating your hips and chest fully towards the target.",
+        "start_frame_number": 210
+      },
+      {
+        "text": "Let's review the second swing.",
+        "start_frame_number": 300
+      },
+      {
+        "text": "Notice how a slight sway in the backswing can affect your balance.",
+        "start_frame_number": 360
+      },
+      {
+        "text": "Work on extending your lead arm more fully through the ball.",
+        "start_frame_number": 450
+      },
+      {
+        "text": "Now for your third swing, which looked much better.",
+        "start_frame_number": 540
+      },
+      {
+        "text": "That's a stronger backswing position, good coil.",
+        "start_frame_number": 600
+      },
+      {
+        "text": "Excellent contact! See how your body rotated better here, leading to a straighter shot.",
+        "start_frame_number": 660
+      },
+      {
+        "text": "Overall, you have good clubhead speed and a solid tempo, especially on that last swing.",
+        "start_frame_number": 720
+      },
+      {
+        "text": "To improve further, focus on minimizing lower body sway in the backswing.",
+        "start_frame_number": 780
+      },
+      {
+        "text": "Also, emphasize a more active hip and chest rotation through impact to maximize power and consistency.",
+        "start_frame_number": 840
+      },
+      {
+        "text": "Keep up the great work!",
+        "start_frame_number": 900
+      }
+    ]
+  }
+}
+

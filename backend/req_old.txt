@@ -1,0 +1,15 @@
+aiofiles==24.1.0
+fastapi==0.116.1
+httpx==0.28.1
+jose==1.0.0
+mediapipe==0.10.21
+numpy==2.3.2
+openai==1.97.1
+passlib==1.7.4
+protobuf==6.31.1
+pydantic==2.11.7
+pytest==8.4.1
+pytest_asyncio==1.1.0
+python-dotenv==1.1.1
+SQLAlchemy==2.0.41
+uvicorn==0.35.0

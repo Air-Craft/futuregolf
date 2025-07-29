@@ -120,7 +120,7 @@ Thumbs.db
 
 # Credentials and sensitive files
 gcs-credential.json
-*.json
+
 !package.json
 !package-lock.json
 !tsconfig.json
@@ -135,7 +135,6 @@ gcs-credential.json
 
 # Test results and output files
 test_results/
-*.json
 !package.json
 !package-lock.json
 !tsconfig.json
