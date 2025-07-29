@@ -1,0 +1,85 @@
+
+## PART 1: Positioning Assistant Session
+
+### AI-Powered Setup Guidance
+
+#### Snapshot Analysis
+```javascript
+// Take positioning snapshots every 1 seconds
+const POSITIONING_INTERVAL = 1000; // 1 seconds
+const positioningAnalysis = {
+  captureInterval: POSITIONING_INTERVAL,
+  analysisEndpoint: '/api/v1/positioning/analyze',
+  maxAttempts: 10 // 20 seconds total
+};
+```
+
+#### Analysis Criteria
+- **User in Frame**: Detect if person is visible and properly framed
+- **Full Body Visible**: Ensure complete swing motion will be captured
+- **Adequate Space**: Verify sufficient room for full swing
+- **Lighting Quality**: Check for adequate lighting conditions
+- **Background Clarity**: Ensure clean background for pose detection
+
+
+#### Positioning Instructions
+- **Distance Guidance**: 
+  - "Move closer to the camera"
+  - "Step back a bit"
+  - "Perfect distance!"
+- **Horizontal Positioning**:
+  - "Move a little to the left"
+  - "Shift right slightly"
+  - "Great positioning!"
+- **Angle Adjustments**:
+  - "Turn slightly toward the camera"
+  - "Face more directly forward"
+  - "Excellent angle!"
+
+### TTS Integration for Setup
+
+#### Instruction Sequence
+1. **Initial Greeting**: "Let's analyze your swing. I'll help you get positioned perfectly"
+2. **Positioning Phase**: Real-time spoken guidance based on AI analysis
+3. **Setup Confirmation**: "That's perfect! Get ready with your club"
+4. **Recording Start**: "Recording begins in 3... 2... 1... Take your swing!"
+
+#### Voice Settings
+- **Voice Selection**: Friendly, clear female voice for instructions
+- **Speed**: Slightly slower than normal speaking pace
+- **Volume**: Automatically adjusts based on device volume settings
+
+### Visual Indication
+- A visual border frame around the edge of the video that shows up as red, yellow, green depending on the position.
+- Once successful, a green checkmark will appear and border fades.
+
+
+### Technical Implementation
+
+* Use Langserver on the backend and create an endpoint
+* Use Langchain serverside to maintain an ongoing summary of the transactions so far
+* App sends either a video still for analysis or text the user has spoken
+* LLM determines what instruction to give the user based on this input history
+* LLM should give score 0-10 based on how well the user is positioned
+* LLM also determine whether to trigger an end to the Positioning Assistant session in which case it also gives a final statement. Some examples:
+  * "That's great! Let's get swinging!" (User has achieved optimum position)
+  * "Ok let's just begin. I'll do my best" (Position is still non-opitimal but may work, and user is frustrated or explicitly wishes to continue)
+  * "That's pretty close. Let's see how we do." (User is almost in ideal position but it has taken quite a while).
+* The LLM decides what action to take: Give instruction or indicate complete. There are no hard rules.
+* Video still should be resized to max_dimension=640 and compressed strongly on the device prior to send to make a quick transfer
+* Database tracking table should be set up to record summary of the Positioning Assistant session for our review and future improvements.
+
+
+---
+
+IGNORE BELOW
+
+
+### State Transitions
+1. **Setup → Ready**: AI confirms proper positioning (see Positioning Assistant above)
+2. **Ready → Recording**: Automatic with voice instruction (see above)
+3. **Recording → Processing**: Automatic after user has taken 3 swings (actual number set in hard coded config for now)
+4. **Processing → Completed**: Automatic. App segways to Swing Analsys screen
+
+
+
