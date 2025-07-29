@@ -11,8 +11,8 @@ import SwiftUI
 struct FutureGolfApp: App {
     var body: some Scene {
         WindowGroup {
-            // Show main tab view with home screen
-            MainTabView()
+            // Show home screen directly without tab navigation
+            HomeView()
         }
     }
 }

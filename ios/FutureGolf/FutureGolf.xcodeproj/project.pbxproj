@@ -29,9 +29,30 @@
 		37361DF72E33FCCA00909D7E /* FutureGolfUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FutureGolfUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D3AF1B3A2E38E86B0024673F /* Exceptions for "FutureGolf" folder in "FutureGolfTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				golf1.mp4,
+			);
+			target = 37361DEC2E33FCCA00909D7E /* FutureGolfTests */;
+		};
+		D3AF1B3B2E38E86B0024673F /* Exceptions for "FutureGolf" folder in "FutureGolfUITests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				golf1.mp4,
+			);
+			target = 37361DF62E33FCCA00909D7E /* FutureGolfUITests */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		37361DE22E33FCC900909D7E /* FutureGolf */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D3AF1B3A2E38E86B0024673F /* Exceptions for "FutureGolf" folder in "FutureGolfTests" target */,
+				D3AF1B3B2E38E86B0024673F /* Exceptions for "FutureGolf" folder in "FutureGolfUITests" target */,
+			);
 			path = FutureGolf;
 			sourceTree = "<group>";
 		};
