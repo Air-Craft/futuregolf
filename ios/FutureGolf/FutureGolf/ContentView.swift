@@ -72,20 +72,19 @@ struct ContentView: View {
                         // Upload Progress
                         if viewModel.isUploading {
                             LiquidGlassCard(
-                                content: {
-                                    HStack(spacing: 12) {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .fairwayGreen))
-                                        Text("Uploading video...")
-                                            .font(.subheadline)
-                                            .foregroundColor(.glassSecondaryText)
-                                    }
-                                    .padding()
-                                    .frame(maxWidth: .infinity)
-                                },
                                 cornerRadius: 12,
                                 glassIntensity: .light
-                            )
+                            ) {
+                                HStack(spacing: 12) {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .fairwayGreen))
+                                    Text("Uploading video...")
+                                        .font(.subheadline)
+                                        .foregroundColor(.glassSecondaryText)
+                                }
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                            }
                             .padding(.horizontal)
                             .depthLayer(level: .raised)
                         }
@@ -139,28 +138,27 @@ struct ContentView: View {
                     // Tips Section
                     if viewModel.selectedVideoURL == nil {
                         LiquidGlassCard(
-                            content: {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    HStack {
-                                        Image(systemName: "lightbulb.fill")
-                                            .font(.title3)
-                                            .foregroundColor(.fairwayGreen)
-                                        Text("Quick Tips")
-                                            .font(.headline)
-                                            .foregroundColor(.glassText)
-                                    }
-                                    
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        TipRow(icon: "camera.fill", text: "Record from down-the-line view")
-                                        TipRow(icon: "figure.golf", text: "Include full swing in frame")
-                                        TipRow(icon: "sun.max.fill", text: "Ensure good lighting")
-                                    }
-                                }
-                                .padding()
-                            },
                             cornerRadius: 16,
                             glassIntensity: .ultraLight
-                        )
+                        ) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Image(systemName: "lightbulb.fill")
+                                        .font(.title3)
+                                        .foregroundColor(.fairwayGreen)
+                                    Text("Quick Tips")
+                                        .font(.headline)
+                                        .foregroundColor(.glassText)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    TipRow(icon: "camera.fill", text: "Record from down-the-line view")
+                                    TipRow(icon: "figure.golf", text: "Include full swing in frame")
+                                    TipRow(icon: "sun.max.fill", text: "Ensure good lighting")
+                                }
+                            }
+                            .padding()
+                        }
                         .padding(.horizontal)
                     }
                     

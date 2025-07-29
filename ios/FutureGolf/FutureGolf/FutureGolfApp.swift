@@ -11,12 +11,8 @@ import SwiftUI
 struct FutureGolfApp: App {
     var body: some Scene {
         WindowGroup {
-            // Temporarily present CoachingVideoView at launch for testing
-            NavigationStack {
-                CoachingVideoView()
-                    .navigationTitle("Video Coaching")
-                    .navigationBarTitleDisplayMode(.inline)
-            }
+            // Show main tab view with home screen
+            MainTabView()
         }
     }
 }

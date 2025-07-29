@@ -10,7 +10,6 @@ struct CoachingVideoView: View {
     @State private var duration: Double = 0
     @State private var playbackSpeed: Float = 0.25
     @State private var showTextTips = true
-    @State private var ttsEnabled = true
     @State private var coachAudioMuted = false
     @State private var currentSwing = 0
     @State private var currentScore: Double = 0.0
@@ -20,6 +19,8 @@ struct CoachingVideoView: View {
     @StateObject private var ttsService = TTSService.shared
     @State private var currentTTSIndex = 0
     @State private var analysisData: VideoCoachingAnalysisData?
+    @State private var controlsVisible = true
+    @State private var hideControlsTask: Task<Void, Never>?
     
     var body: some View {
         GeometryReader { geometry in
@@ -32,9 +33,8 @@ struct CoachingVideoView: View {
                         .ignoresSafeArea()
                 }
                 
-                // Overlay controls with Liquid Glass styling
+                // Top overlay with stats (always visible)
                 VStack {
-                    // Top overlay with stats
                     HStack {
                         overlayViews
                         Spacer()
@@ -43,60 +43,71 @@ struct CoachingVideoView: View {
                     .padding(.horizontal, 20)
                     
                     Spacer()
+                }
+                
+                // Bottom controls with auto-hide
+                VStack {
+                    Spacer()
                     
-                    // Bottom controls with translucent black background
                     videoControls
                         .background(
-                            Color.black.opacity(0.7),
-                            in: RoundedRectangle(cornerRadius: 20)
+                            Color.black.opacity(0.8),
+                            in: RoundedRectangle(cornerRadius: 16)
                         )
                         .padding(.horizontal, 20)
                         .padding(.bottom, 40)
+                        .opacity(controlsVisible ? 1.0 : 0.0)
+                        .animation(.easeInOut(duration: 0.3), value: controlsVisible)
                 }
+            }
+            .onTapGesture {
+                showControlsTemporarily()
             }
         }
         .navigationBarHidden(true)
         .onAppear {
             setupVideo()
             loadAnalysisData()
+            startHideControlsTimer()
         }
         .onDisappear {
             cleanupPlayer()
+            hideControlsTask?.cancel()
         }
     }
     
     private var overlayViews: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                // Swing counter with glass morphism
+                // Swing counter with translucent black background
                 Text("Swing: \(currentSwing)")
                     .font(.headline.weight(.semibold))
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().stroke(.white.opacity(0.2), lineWidth: 1))
+                    .background(Color.black.opacity(0.7), in: Capsule())
+                    .overlay(Capsule().stroke(.white.opacity(0.3), lineWidth: 1))
                 
-                // Score with glass morphism  
+                // Score with translucent black background
                 Text("Score: \(String(format: "%.1f", currentScore))")
                     .font(.headline.weight(.semibold))
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().stroke(.white.opacity(0.2), lineWidth: 1))
+                    .background(Color.black.opacity(0.7), in: Capsule())
+                    .overlay(Capsule().stroke(.white.opacity(0.3), lineWidth: 1))
             }
             
-            // Clubhead speed with glass morphism
+            // Clubhead speed with translucent black background
             Text("Clubhead: \(clubheadSpeed)")
                 .font(.subheadline.weight(.medium))
                 .foregroundColor(.white)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(.thinMaterial, in: Capsule())
-                .overlay(Capsule().stroke(.white.opacity(0.15), lineWidth: 1))
+                .background(Color.black.opacity(0.6), in: Capsule())
+                .overlay(Capsule().stroke(.white.opacity(0.25), lineWidth: 1))
             
-            // Text tips with enhanced glass styling
+            // Text tips with translucent black styling
             if showTextTips && !activeTextTips.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(activeTextTips, id: \.self) { tip in
@@ -105,8 +116,8 @@ struct CoachingVideoView: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(.blue.opacity(0.3), lineWidth: 1))
+                            .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.3), lineWidth: 1))
                     }
                 }
             }
@@ -114,9 +125,9 @@ struct CoachingVideoView: View {
     }
     
     private var videoControls: some View {
-        VStack(spacing: 16) {
-            // Time scrubber with glass styling
-            VStack(spacing: 8) {
+        VStack(spacing: 12) {
+            // Time scrubber
+            VStack(spacing: 6) {
                 Slider(value: $currentTime, in: 0...duration) { editing in
                     if !editing {
                         seekToTime(currentTime)
@@ -136,10 +147,12 @@ struct CoachingVideoView: View {
                         .foregroundColor(.white.opacity(0.8))
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 16)
             
-            // Main controls with glass morphism
-            HStack(spacing: 24) {
+            // Main controls - centered and compact
+            HStack(spacing: 0) {
+                Spacer()
+                
                 // Skip back 5s
                 Button(action: skipBackward) {
                     Image(systemName: "gobackward.5")
@@ -150,15 +163,19 @@ struct CoachingVideoView: View {
                         .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 1))
                 }
                 
-                // Play/Pause with larger glass button
+                Spacer().frame(width: 20)
+                
+                // Play/Pause
                 Button(action: togglePlayPause) {
                     Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                         .font(.title.weight(.bold))
                         .foregroundColor(.white)
-                        .frame(width: 56, height: 56)
+                        .frame(width: 52, height: 52)
                         .background(Color.black.opacity(0.6), in: Circle())
                         .overlay(Circle().stroke(.white.opacity(0.4), lineWidth: 2))
                 }
+                
+                Spacer().frame(width: 20)
                 
                 // Skip forward 5s
                 Button(action: skipForward) {
@@ -171,78 +188,56 @@ struct CoachingVideoView: View {
                 }
                 
                 Spacer()
-                
-                // Playback speed with translucent black styling
+            }
+            
+            // Secondary controls - compact row
+            HStack(spacing: 12) {
+                // Playback speed
                 Button(action: cyclePlaybackSpeed) {
                     Text("\(String(format: "%.2f", playbackSpeed))x")
                         .font(.caption.weight(.semibold))
                         .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
                         .background(Color.black.opacity(0.5), in: Capsule())
                         .overlay(Capsule().stroke(.white.opacity(0.3), lineWidth: 1))
                 }
-            }
-            .padding(.horizontal, 20)
-            
-            // Secondary controls with enhanced glass styling
-            HStack(spacing: 16) {
-                // TTS toggle
-                Button(action: { ttsEnabled.toggle() }) {
-                    HStack(spacing: 6) {
-                        if ttsService.isLoading {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .tint(.white)
-                        } else {
-                            Image(systemName: ttsEnabled ? (ttsService.isPlaying ? "speaker.wave.3.fill" : "speaker.wave.2.fill") : "speaker.slash.fill")
-                                .font(.caption.weight(.semibold))
-                        }
-                        Text("AI TTS")
-                            .font(.caption.weight(.medium))
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.black.opacity(ttsEnabled ? 0.6 : 0.4), in: Capsule())
-                    .overlay(Capsule().stroke(.white.opacity(ttsEnabled ? 0.4 : 0.2), lineWidth: 1))
-                }
                 
-                // Coach audio mute
+                Spacer()
+                
+                // Single coaching mute button (combines TTS and Coach)
                 Button(action: { coachAudioMuted.toggle() }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: coachAudioMuted ? "speaker.slash" : "speaker.wave.1")
+                    HStack(spacing: 4) {
+                        Image(systemName: coachAudioMuted ? "speaker.slash" : "speaker.wave.2")
                             .font(.caption.weight(.semibold))
-                        Text("Coach")
+                        Text("Coaching")
                             .font(.caption.weight(.medium))
                     }
                     .foregroundColor(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
                     .background(Color.black.opacity(coachAudioMuted ? 0.4 : 0.6), in: Capsule())
                     .overlay(Capsule().stroke(.white.opacity(coachAudioMuted ? 0.2 : 0.4), lineWidth: 1))
                 }
                 
                 // Text tips toggle
                 Button(action: { showTextTips.toggle() }) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 4) {
                         Image(systemName: showTextTips ? "text.bubble.fill" : "text.bubble")
                             .font(.caption.weight(.semibold))
                         Text("Tips")
                             .font(.caption.weight(.medium))
                     }
                     .foregroundColor(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
                     .background(Color.black.opacity(showTextTips ? 0.6 : 0.4), in: Capsule())
                     .overlay(Capsule().stroke(.white.opacity(showTextTips ? 0.4 : 0.2), lineWidth: 1))
                 }
-                
-                Spacer()
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 16)
         }
-        .padding(.vertical, 20)
+        .padding(.vertical, 12)
     }
     
     private func setupVideo() {
@@ -401,7 +396,7 @@ struct CoachingVideoView: View {
     }
     
     private func checkForTTSEvents() {
-        guard ttsEnabled, let data = analysisData else { return }
+        guard let data = analysisData else { return }
         
         // Frame numbers in JSON are based on normal playback at 30 FPS
         // Current time is the actual video time, so we calculate frame directly
@@ -418,12 +413,16 @@ struct CoachingVideoView: View {
     }
     
     private func speakText(_ text: String) {
-        guard !coachAudioMuted else { return }
-        
+        // Always generate TTS, but only play audio if not muted
         ttsService.speakText(text) { success in
             if !success {
                 print("Failed to speak text: \(text)")
             }
+        }
+        
+        // If coaching is muted, immediately pause the audio player
+        if coachAudioMuted {
+            ttsService.pauseSpeaking()
         }
     }
     
@@ -503,6 +502,23 @@ struct CoachingVideoView: View {
         }
         player?.pause()
         ttsService.stopSpeaking()
+    }
+    
+    private func startHideControlsTimer() {
+        hideControlsTask?.cancel()
+        hideControlsTask = Task {
+            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+            if !Task.isCancelled {
+                await MainActor.run {
+                    controlsVisible = false
+                }
+            }
+        }
+    }
+    
+    private func showControlsTemporarily() {
+        controlsVisible = true
+        startHideControlsTimer()
     }
 }
 

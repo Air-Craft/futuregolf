@@ -50,7 +50,6 @@ struct HomeView: View {
                     }
                     .padding()
                 }
-                .liquidGlassBackground(intensity: .ultraLight)
             }
             .navigationTitle("FutureGolf")
             .navigationBarTitleDisplayMode(.large)
@@ -82,10 +81,6 @@ struct HomeView: View {
                     animateContent = true
                 }
                 setupBackgroundVideo()
-                // Automatically present coaching video for testing
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    showCoachingVideo = true
-                }
             }
             .sheet(isPresented: $showDemoVideo) {
                 NavigationStack {
@@ -201,18 +196,60 @@ struct HomeView: View {
     }
     
     private var welcomeSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(greetingText)
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .foregroundStyle(.primary)
+        VStack(alignment: .center, spacing: 20) {
+            // Main App Title with fancy styling and translucent background
+            VStack(spacing: 12) {
+                Text("Golf Swing Analyzer")
+                    .font(.system(size: 28, weight: .black, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.blue, .cyan, .green],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 2)
+                
+                Text("Powered by Edge AI")
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.orange, .red],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .tracking(1.2)
+            }
+            .padding(.vertical, 20)
+            .padding(.horizontal, 24)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(.white.opacity(0.2), lineWidth: 1)
+            )
             
-            Text("Ready to perfect your swing?")
-                .font(.title2)
-                .foregroundStyle(.secondary)
+            // Greeting text with translucent background
+            VStack(spacing: 6) {
+                Text(greetingText)
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                
+                Text("Ready to perfect your swing?")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.8))
+            }
+            .padding(.vertical, 16)
+            .padding(.horizontal, 20)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(.white.opacity(0.2), lineWidth: 1)
+            )
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
     }
     
     private var quickActionsSection: some View {
@@ -245,39 +282,33 @@ struct HomeView: View {
             }
             .buttonStyle(LiquidGlassButtonStyle(isProminent: true))
             
-            // Temporary Coaching Video Button (BRIGHT RED FOR TESTING)
-            NavigationLink(destination: CoachingVideoView()) {
+            // Coaching Video Button (4th Button)
+            Button(action: {
+                showCoachingVideo = true
+                HapticManager.impact(.medium)
+            }) {
                 HStack {
-                    Image(systemName: "video.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.white)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("🎥 COACHING VIDEO")
-                            .font(.headline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                        Text("TEST BUTTON - TAP HERE")
-                            .font(.caption)
-                            .foregroundColor(.white)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("🎥 Video Coaching", systemImage: "play.tv.fill")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                        
+                        Text("Watch demo with AI coaching voice")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                     
                     Spacer()
                     
-                    Text("TEMP")
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.yellow)
-                        .foregroundColor(.black)
-                        .cornerRadius(8)
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.largeTitle)
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.tint)
                 }
                 .padding()
                 .frame(maxWidth: .infinity)
-                .background(Color.red)
-                .cornerRadius(12)
             }
+            .buttonStyle(LiquidGlassButtonStyle(isProminent: true))
             
             // Secondary Actions
             HStack(spacing: 16) {
@@ -320,67 +351,6 @@ struct HomeView: View {
                 .buttonStyle(LiquidGlassButtonStyle(isProminent: false))
             }
             
-            // Demo Video Playback Button (Fourth Button)
-            Button(action: {
-                showCoachingVideo = true
-                HapticManager.impact(.medium)
-            }) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("🎬 Demo Video Playback", systemImage: "play.tv.fill")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                        
-                        Text("Test video with TTS coaching")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    Image(systemName: "arrow.right.circle.fill")
-                        .font(.largeTitle)
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.tint)
-                }
-                .padding()
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(LiquidGlassButtonStyle(isProminent: true))
-            
-            // Demo Button (for testing)
-            Button(action: {
-                showDemoVideo = true
-                HapticManager.impact(.medium)
-            }) {
-                HStack {
-                    Image(systemName: "play.rectangle.fill")
-                        .font(.title3)
-                        .symbolRenderingMode(.hierarchical)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Demo Video")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Text("Try with sample video")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    Text("NEW")
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(Color.red))
-                        .foregroundColor(.white)
-                }
-                .padding()
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(LiquidGlassButtonStyle(isProminent: false))
         }
     }
     

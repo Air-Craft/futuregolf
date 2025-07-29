@@ -55,7 +55,9 @@
       "Bash(xcrun simctl install:*)",
       "Bash(gtimeout:*)",
       "Bash(pip uninstall:*)",
-      "Bash(xcrun simctl shutdown:*)"
+      "Bash(xcrun simctl shutdown:*)",
+      "Bash(xcrun simctl device booted spawn:*)",
+      "Bash(xcrun simctl terminate:*)"
     ],
     "deny": []
   },
