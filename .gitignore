@@ -1,9 +1,9 @@
 # General
 tmp/
-*.mov
-*.mp4
-*.m4v
-*.MOV
+#*.mov
+#*.mp4
+#*.m4v
+#*.MOV
 .DS_Store
 *.log
 *.swp
