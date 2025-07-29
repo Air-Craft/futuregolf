@@ -17,8 +17,7 @@ struct HomeView: View {
                     VideoPlayer(player: player)
                         .disabled(true)
                         .ignoresSafeArea(.all)
-                        .opacity(0.4)
-                        .blur(radius: 2)
+                        .opacity(1.0)
                         .onAppear {
                             player.play()
                         }
@@ -160,7 +159,7 @@ struct HomeView: View {
                         .fontWeight(.semibold)
                     Spacer()
                 }
-                .foregroundColor(.white)
+                .foregroundColor(.black)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 16)
             }
@@ -179,7 +178,7 @@ struct HomeView: View {
                         .fontWeight(.semibold)
                     Spacer()
                 }
-                .foregroundColor(.white)
+                .foregroundColor(.black)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 16)
             }
@@ -195,7 +194,7 @@ struct HomeView: View {
                         .fontWeight(.semibold)
                     Spacer()
                 }
-                .foregroundColor(.white)
+                .foregroundColor(.black)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 16)
             }
@@ -214,7 +213,7 @@ struct HomeView: View {
                         .fontWeight(.semibold)
                     Spacer()
                 }
-                .foregroundColor(.white)
+                .foregroundColor(.black)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 16)
             }
@@ -307,15 +306,32 @@ struct LiquidGlassPillButtonStyle: ButtonStyle {
                     .fill(Material.ultraThinMaterial)
                     .overlay {
                         Capsule()
-                            .fill(Color.white.opacity(0.1))
+                            .fill(Color.white.opacity(0.12))
+                    }
+                    .overlay {
+                        // Specular highlight effect
+                        GeometryReader { geometry in
+                            LinearGradient(
+                                gradient: Gradient(stops: [
+                                    .init(color: .clear, location: 0),
+                                    .init(color: Color.white.opacity(0.2), location: 0.3),
+                                    .init(color: Color.white.opacity(0.08), location: 0.7),
+                                    .init(color: .clear, location: 1)
+                                ]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            .clipShape(Capsule())
+                        }
                     }
                     .overlay {
                         Capsule()
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            .stroke(Color.white.opacity(0.25), lineWidth: 1.5)
                     }
+                    .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
             }
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .opacity(configuration.isPressed ? 0.8 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .opacity(configuration.isPressed ? 0.85 : 1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
