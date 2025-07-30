@@ -33,6 +33,8 @@ class OnDeviceSTTService: NSObject, ObservableObject {
         "stop",
         "finish",
         "done",
+        "cancel",
+        "abort",
         "that's enough",
         "end recording",
         "stop recording"
