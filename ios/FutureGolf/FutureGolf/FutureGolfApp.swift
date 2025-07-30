@@ -213,12 +213,7 @@ struct DebugRecordingLauncher: View {
             let isHealthy = await apiService.checkServiceHealth()
             
             if isHealthy {
-                addLog("Testing voice API...")
-                let voiceResponse = try await apiService.analyzeVoiceForBegin(
-                    transcript: "test connectivity",
-                    confidence: 0.8
-                )
-                addLog("Voice API response: ready=\(voiceResponse.readyToBegin)")
+                addLog("API service is healthy")
                 return "✅ APIs working"
             } else {
                 return "❌ Health check failed"

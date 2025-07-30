@@ -57,7 +57,8 @@
       "Bash(pip uninstall:*)",
       "Bash(xcrun simctl shutdown:*)",
       "Bash(xcrun simctl device booted spawn:*)",
-      "Bash(xcrun simctl terminate:*)"
+      "Bash(xcrun simctl terminate:*)",
+      "Bash(plutil:*)"
     ],
     "deny": []
   },

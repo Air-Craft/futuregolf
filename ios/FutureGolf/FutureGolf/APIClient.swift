@@ -1,7 +1,7 @@
 import Foundation
 
 class APIClient {
-    private let baseURL = "http://localhost:8000/api/v1"
+    private let baseURL = Config.apiBaseURL
     private let session = URLSession.shared
     
     func uploadAndAnalyzeVideo(url: URL) async -> AnalysisResult? {

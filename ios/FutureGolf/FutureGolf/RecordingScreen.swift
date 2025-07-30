@@ -33,16 +33,17 @@ struct RecordingScreen: View {
             }
             .padding()
             
-            // Framerate Display (Top Right Corner)
+            // Framerate Display (Top Right Corner, below camera flip button)
             if viewModel.currentFrameRate > 0 {
                 VStack {
                     HStack {
                         Spacer()
                         framerateDisplayView
                     }
+                    .padding(.top, viewModel.currentPhase == .setup ? 60 : 16) // Space for camera flip button when in setup
                     Spacer()
                 }
-                .padding()
+                .padding(.horizontal)
             }
         }
         .navigationBarHidden(true)

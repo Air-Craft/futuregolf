@@ -89,6 +89,7 @@ class RecordingViewModel: NSObject, ObservableObject {
     var ttsService: TTSService = TTSService.shared
     private let apiClient = APIClient()
     private let recordingAPIService = RecordingAPIService.shared
+    private let onDeviceSTT = OnDeviceSTTService.shared
     
     // MARK: - Camera Session
     var captureSession: AVCaptureSession?
@@ -103,10 +104,7 @@ class RecordingViewModel: NSObject, ObservableObject {
     private var timeoutTimer: Timer?
     
     // MARK: - Voice Processing
-    private var speechRecognizer: SFSpeechRecognizer?
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
-    private let audioEngine = AVAudioEngine()
+    private var voiceCommandCancellable: AnyCancellable?
     
     // MARK: - Callbacks
     var onRecordingStarted: (() -> Void)?
@@ -125,8 +123,8 @@ class RecordingViewModel: NSObject, ObservableObject {
             setupProgressCircles()
             print("🐛 RecordingViewModel: Progress circles setup completed")
             
-            setupSpeechRecognizer()
-            print("🐛 RecordingViewModel: Speech recognizer setup completed")
+            setupVoiceCommands()
+            print("🐛 RecordingViewModel: Voice commands setup completed")
             
             // Start API session
             let sessionId = recordingAPIService.startSession()
@@ -143,9 +141,23 @@ class RecordingViewModel: NSObject, ObservableObject {
         progressCircles = (0..<targetSwingCount).map { _ in ProgressCircle() }
     }
     
-    private func setupSpeechRecognizer() {
-        speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-        speechRecognizer?.delegate = self
+    private func setupVoiceCommands() {
+        // Listen for voice commands from the on-device STT service
+        voiceCommandCancellable = onDeviceSTT.$lastCommand
+            .compactMap { $0 }
+            .sink { [weak self] command in
+                self?.handleVoiceCommand(command)
+            }
+    }
+    
+    private func handleVoiceCommand(_ command: VoiceCommand) {
+        guard currentPhase == .setup else { return }
+        
+        switch command {
+        case .startRecording:
+            print("🎤 Voice command received: Start Recording")
+            startRecording()
+        }
     }
     
     func setupCamera() async throws {
@@ -491,6 +503,7 @@ class RecordingViewModel: NSObject, ObservableObject {
         stopVideoRecording()
         
         // Stop voice recognition
+        onDeviceSTT.stopListening()
         stopVoiceRecognition()
         
         // Play completion TTS
@@ -558,157 +571,25 @@ class RecordingViewModel: NSObject, ObservableObject {
     // MARK: - Voice Recognition Methods
     
     func startVoiceRecognition() async throws {
-        print("🐛 RecordingViewModel: Starting voice recognition setup...")
+        print("🐛 RecordingViewModel: Starting on-device voice recognition...")
         
-        // Check microphone permission
-        if #available(iOS 17.0, *) {
-            let audioAuthStatus = AVAudioApplication.shared.recordPermission
-            print("🐛 RecordingViewModel: Audio permission status (iOS 17+): \(audioAuthStatus.rawValue)")
-            
-            if audioAuthStatus != .granted {
-                if audioAuthStatus == .undetermined {
-                    print("🐛 RecordingViewModel: Requesting audio permission...")
-                    let granted = await AVAudioApplication.requestRecordPermission()
-                    print("🐛 RecordingViewModel: Audio permission granted: \(granted)")
-                    if !granted {
-                        throw RecordingError.audioPermissionDenied
-                    }
-                } else {
-                    print("🐛 RecordingViewModel: Audio permission denied or restricted")
-                    throw RecordingError.audioPermissionDenied
-                }
-            }
-        } else {
-            let audioAuthStatus = AVAudioSession.sharedInstance().recordPermission
-            print("🐛 RecordingViewModel: Audio permission status (legacy): \(audioAuthStatus.rawValue)")
-            
-            if audioAuthStatus != .granted {
-                if audioAuthStatus == .undetermined {
-                    print("🐛 RecordingViewModel: Requesting audio permission...")
-                    let granted = await withCheckedContinuation { continuation in
-                        AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                            continuation.resume(returning: granted)
-                        }
-                    }
-                    print("🐛 RecordingViewModel: Audio permission granted: \(granted)")
-                    if !granted {
-                        throw RecordingError.audioPermissionDenied
-                    }
-                } else {
-                    print("🐛 RecordingViewModel: Audio permission denied or restricted")
-                    throw RecordingError.audioPermissionDenied
-                }
-            }
+        // Request permissions for the on-device STT service
+        let hasPermissions = await onDeviceSTT.requestPermissions()
+        
+        if !hasPermissions {
+            throw RecordingError.audioPermissionDenied
         }
         
-        // Setup audio session
-        let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playAndRecord, mode: .measurement, options: .duckOthers)
-        try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-        
-        // Create recognition request
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        guard let recognitionRequest = recognitionRequest else {
-            throw RecordingError.networkError
-        }
-        
-        recognitionRequest.shouldReportPartialResults = true
-        
-        // Create recognition task
-        recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
-            Task { @MainActor in
-                if let result = result {
-                    self?.processVoiceInput(result.bestTranscription.formattedString)
-                }
-                
-                if error != nil {
-                    self?.stopVoiceRecognition()
-                }
-            }
-        }
-        
-        // Setup audio engine
-        let inputNode = audioEngine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
-        
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
-        }
-        
-        audioEngine.prepare()
-        try audioEngine.start()
+        // Start listening for voice commands
+        onDeviceSTT.startListening()
     }
     
     func stopVoiceRecognition() {
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
-        
-        recognitionRequest?.endAudio()
-        recognitionRequest = nil
-        
-        recognitionTask?.cancel()
-        recognitionTask = nil
+        onDeviceSTT.stopListening()
     }
     
-    func processVoiceInput(_ text: String) {
-        guard currentPhase == .setup else { return }
-        
-        // Use API service for voice analysis
-        Task {
-            do {
-                let response = try await recordingAPIService.analyzeVoiceForBegin(
-                    transcript: text,
-                    confidence: 0.8 // Default confidence from speech recognition
-                )
-                
-                await MainActor.run {
-                    // Only trigger recording if high confidence ready signal
-                    if response.readyToBegin && response.confidence > 0.7 {
-                        print("Voice begin signal detected: \(response.reason)")
-                        startRecording()
-                    } else {
-                        print("Voice analysis: \(response.reason) (confidence: \(response.confidence))")
-                    }
-                }
-            } catch {
-                print("Voice analysis API error: \(error)")
-                // Fallback to local analysis if API fails
-                processVoiceInputLocal(text)
-            }
-        }
-    }
-    
-    private func processVoiceInputLocal(_ text: String) {
-        let lowercaseText = text.lowercased()
-        
-        // Fallback local analysis
-        let beginKeywords = ["begin", "start", "ready", "go", "record"]
-        let confirmationWords = ["yes", "okay", "sure", "let's"]
-        
-        var confidence = 0.0
-        
-        for keyword in beginKeywords {
-            if lowercaseText.contains(keyword) {
-                confidence += 0.4
-            }
-        }
-        
-        for word in confirmationWords {
-            if lowercaseText.contains(word) {
-                confidence += 0.2
-            }
-        }
-        
-        // Additional context clues
-        if lowercaseText.contains("i'm ready") || lowercaseText.contains("let's begin") {
-            confidence += 0.3
-        }
-        
-        // Only trigger if confidence is high enough
-        if confidence >= 0.6 && currentPhase == .setup {
-            startRecording()
-        }
-    }
+    // Voice processing is now handled by OnDeviceSTTService
+    // Commands are processed in handleVoiceCommand() method
     
     // MARK: - Still Capture Methods
     
@@ -825,6 +706,7 @@ class RecordingViewModel: NSObject, ObservableObject {
     func cleanup() {
         stopAllTimers()
         stopVoiceRecognition()
+        voiceCommandCancellable?.cancel()
         captureSession?.stopRunning()
         recordingAPIService.endSession()
     }
@@ -877,19 +759,8 @@ extension RecordingViewModel: AVCapturePhotoCaptureDelegate {
     }
 }
 
-// MARK: - SFSpeechRecognizerDelegate
-
-extension RecordingViewModel: SFSpeechRecognizerDelegate {
-    
-    nonisolated func speechRecognizer(_ speechRecognizer: SFSpeechRecognizer, availabilityDidChange available: Bool) {
-        // Handle speech recognizer availability changes
-        if !available {
-            Task { @MainActor in
-                self.stopVoiceRecognition()
-            }
-        }
-    }
-}
+// MARK: - Voice Commands
+// Voice command handling is now managed by OnDeviceSTTService
 
 // MARK: - UIImage Extension
 

@@ -5,7 +5,7 @@ import Combine
 class TTSService: ObservableObject {
     static let shared = TTSService()
     
-    private let serverURL = "http://localhost:8000"
+    private let serverURL = Config.serverBaseURL
     private var audioPlayer: AVAudioPlayer?
     private var audioPlayerDelegate: AudioPlayerDelegate?
     private var speechQueue: [(String, (Bool) -> Void)] = []
@@ -19,48 +19,70 @@ class TTSService: ObservableObject {
     
     private func configureAudioSession() {
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+            // Use playAndRecord to be compatible with STT that might be running
+            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .spokenAudio, options: [.duckOthers, .defaultToSpeaker])
             try AVAudioSession.sharedInstance().setActive(true)
-            print("Audio session configured successfully")
+            print("🎵 TTS: Audio session configured successfully")
+            print("🎵 TTS: Audio session category: \(AVAudioSession.sharedInstance().category)")
+            print("🎵 TTS: Audio session mode: \(AVAudioSession.sharedInstance().mode)")
+            print("🎵 TTS: Audio session options: \(AVAudioSession.sharedInstance().categoryOptions)")
         } catch {
-            print("Failed to configure audio session: \(error)")
+            print("🎵 TTS: Failed to configure audio session: \(error)")
         }
     }
     
     func speakText(_ text: String, completion: @escaping (Bool) -> Void = { _ in }) {
         guard !text.isEmpty else {
+            print("🎵 TTS: Empty text provided, skipping")
             completion(false)
             return
         }
         
+        print("🎵 TTS: Received request to speak: '\(text)'")
+        
         // Add to queue and process
         speechQueue.append((text, completion))
+        print("🎵 TTS: Added to queue. Queue size: \(speechQueue.count)")
         processNextInQueue()
     }
     
     private func processNextInQueue() {
-        guard !isProcessingQueue && !speechQueue.isEmpty else { return }
+        guard !isProcessingQueue && !speechQueue.isEmpty else { 
+            if isProcessingQueue {
+                print("🎵 TTS: Already processing queue")
+            } else if speechQueue.isEmpty {
+                print("🎵 TTS: Queue is empty")
+            }
+            return 
+        }
         
+        print("🎵 TTS: Starting to process next item in queue")
         isProcessingQueue = true
         let (text, completion) = speechQueue.removeFirst()
+        
+        print("🎵 TTS: Processing text: '\(text)'")
         
         // Stop any current playback
         stopCurrentPlayback()
         
         isLoading = true
+        print("🎵 TTS: Set loading state to true, starting synthesis...")
         
         Task {
             do {
+                print("🎵 TTS: Calling synthesizeSpeech...")
                 let audioData = try await synthesizeSpeech(text: text)
+                print("🎵 TTS: Successfully synthesized \(audioData.count) bytes of audio data")
                 await MainActor.run {
                     self.playAudio(data: audioData) { [weak self] success in
+                        print("🎵 TTS: Playback completed with success: \(success)")
                         completion(success)
                         self?.isProcessingQueue = false
                         self?.processNextInQueue()
                     }
                 }
             } catch {
-                print("TTS Error: \(error)")
+                print("🎵 TTS Error: \(error)")
                 await MainActor.run {
                     self.isLoading = false
                     completion(false)
@@ -72,7 +94,11 @@ class TTSService: ObservableObject {
     }
     
     private func synthesizeSpeech(text: String) async throws -> Data {
-        guard let url = URL(string: "\(serverURL)/api/v1/tts/coaching") else {
+        let urlString = "\(serverURL)/api/v1/tts/coaching"
+        print("🎵 TTS: Attempting to synthesize speech at URL: \(urlString)")
+        
+        guard let url = URL(string: urlString) else {
+            print("🎵 TTS: Invalid URL: \(urlString)")
             throw TTSError.invalidURL
         }
         
@@ -83,21 +109,35 @@ class TTSService: ObservableObject {
             speed: 0.9
         )
         
+        print("🎵 TTS: Request body: \(requestBody)")
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(requestBody)
         
+        print("🎵 TTS: Sending POST request to \(url)")
+        
         let (data, response) = try await URLSession.shared.data(for: request)
         
+        print("🎵 TTS: Received response with \(data.count) bytes")
+        
         guard let httpResponse = response as? HTTPURLResponse else {
+            print("🎵 TTS: Invalid response type")
             throw TTSError.invalidResponse
         }
         
+        print("🎵 TTS: HTTP Status Code: \(httpResponse.statusCode)")
+        
         guard httpResponse.statusCode == 200 else {
+            print("🎵 TTS: Server error with status code: \(httpResponse.statusCode)")
+            if let errorString = String(data: data, encoding: .utf8) {
+                print("🎵 TTS: Error response body: \(errorString)")
+            }
             throw TTSError.serverError(httpResponse.statusCode)
         }
         
+        print("🎵 TTS: Successfully received audio data")
         return data
     }
     
