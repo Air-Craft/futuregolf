@@ -7,43 +7,41 @@ struct HomeView: View {
     @State private var showDemoVideo = false
     @State private var showCoachingVideo = false
     @State private var showRecordingScreen = false
+    @State private var showPreviousAnalyses = false
     @State private var viewModel = VideoAnalysisViewModel()
     @State private var player: AVPlayer?
     
     var body: some View {
-        NavigationStack {
-            ZStack {
-                // Full-screen background video player
-                if let player = player {
-                    VideoPlayer(player: player)
-                        .disabled(true)
-                        .ignoresSafeArea(.all)
-                        .opacity(1.0)
-                        .onAppear {
-                            player.play()
-                        }
-                }
-                
-                // Main content overlay
-                VStack(spacing: 0) {
-                    // Top spacer to push content down from status bar
-                    Spacer(minLength: 60)
-                    
-                    // Title Section
-                    titleSection
-                        .padding(.horizontal, 24)
-                    
-                    Spacer()
-                    
-                    // Four pill buttons
-                    buttonSection
-                        .padding(.horizontal, 24)
-                    
-                    // Bottom spacer for safe area
-                    Spacer(minLength: 80)
-                }
+        ZStack {
+            // Full-screen background video player that goes UNDER status bar
+            if let player = player {
+                FullScreenVideoPlayer(player: player)
+                    .ignoresSafeArea(.all)
+                    .onAppear {
+                        player.play()
+                    }
             }
-            .navigationBarHidden(true)
+            
+            // Main content overlay
+            VStack(spacing: 0) {
+                // Top spacer to push content down from status bar
+                Spacer(minLength: 60)
+                
+                // Title Section
+                titleSection
+                    .padding(.horizontal, 24)
+                
+                Spacer()
+                
+                // Four pill buttons
+                buttonSection
+                    .padding(.horizontal, 24)
+                
+                // Bottom spacer for safe area
+                Spacer(minLength: 80)
+            }
+        }
+        .ignoresSafeArea(.all)
             .sheet(isPresented: $showUploadFlow) {
                 UploadVideoJourneyView(viewModel: viewModel)
             }
@@ -108,7 +106,19 @@ struct HomeView: View {
                     RecordingScreen()
                 }
             }
-        }
+            .sheet(isPresented: $showPreviousAnalyses) {
+                NavigationStack {
+                    PreviousAnalysesView()
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button("Done") {
+                                    showPreviousAnalyses = false
+                                }
+                            }
+                        }
+                }
+            }
     }
     
     // MARK: - Title Section
@@ -191,8 +201,12 @@ struct HomeView: View {
             }
             .buttonStyle(LiquidGlassPillButtonStyle())
             
-            // Button 3: Previous Swing Analyses
-            NavigationLink(destination: PreviousAnalysesView()) {
+            // Button 3: Previous Swing Analyses (using Button instead of NavigationLink to avoid styling issues)
+            Button(action: {
+                // Navigate programmatically instead of using NavigationLink
+                showPreviousAnalyses = true
+                LiquidGlassHaptics.impact(.medium)
+            }) {
                 HStack {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.title2)
@@ -340,6 +354,41 @@ struct LiquidGlassPillButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
             .opacity(configuration.isPressed ? 0.85 : 1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Full Screen Video Player
+
+struct FullScreenVideoPlayer: UIViewRepresentable {
+    let player: AVPlayer
+    
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .black
+        
+        let playerLayer = AVPlayerLayer(player: player)
+        playerLayer.videoGravity = .resizeAspectFill // This ensures it fills the entire screen
+        playerLayer.frame = UIScreen.main.bounds // Use full screen bounds
+        
+        view.layer.addSublayer(playerLayer)
+        
+        // Set up observer to update frame on bounds change
+        context.coordinator.playerLayer = playerLayer
+        
+        return view
+    }
+    
+    func updateUIView(_ uiView: UIView, context: Context) {
+        // Update the player layer frame to match the full screen
+        context.coordinator.playerLayer?.frame = UIScreen.main.bounds
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+    
+    class Coordinator {
+        var playerLayer: AVPlayerLayer?
     }
 }
 
