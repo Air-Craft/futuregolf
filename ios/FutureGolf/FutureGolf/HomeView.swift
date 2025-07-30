@@ -31,16 +31,17 @@ struct HomeView: View {
                     
                     // Title Section
                     titleSection
+                        .padding(.horizontal, 24)
                     
                     Spacer()
                     
                     // Four pill buttons
                     buttonSection
+                        .padding(.horizontal, 24)
                     
                     // Bottom spacer for safe area
                     Spacer(minLength: 80)
                 }
-                .padding(.horizontal, 24)
             }
             .navigationBarHidden(true)
             .sheet(isPresented: $showUploadFlow) {

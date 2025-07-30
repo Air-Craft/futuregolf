@@ -32,6 +32,18 @@ struct RecordingScreen: View {
                 }
             }
             .padding()
+            
+            // Framerate Display (Top Right Corner)
+            if viewModel.currentFrameRate > 0 {
+                VStack {
+                    HStack {
+                        Spacer()
+                        framerateDisplayView
+                    }
+                    Spacer()
+                }
+                .padding()
+            }
         }
         .navigationBarHidden(true)
         .preferredColorScheme(.dark) // Better visibility over camera feed
@@ -250,6 +262,18 @@ struct RecordingScreen: View {
         .padding(.horizontal)
     }
     
+    // MARK: - Framerate Display
+    
+    private var framerateDisplayView: some View {
+        Text("\(Int(viewModel.currentFrameRate)) FPS")
+            .font(.system(size: 12, weight: .medium, design: .monospaced))
+            .foregroundColor(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
+            .opacity(0.8)
+    }
+    
     // MARK: - Time Display
     
     private var timeDisplayView: some View {
@@ -405,30 +429,82 @@ struct CameraPreviewView: UIViewRepresentable {
     @ObservedObject var viewModel: RecordingViewModel
     
     func makeUIView(context: Context) -> UIView {
+        print("🐛 CameraPreviewView: Creating preview view")
+        
         let view = UIView()
         view.backgroundColor = .black
         
-        guard let session = viewModel.captureSession else { return view }
-        
-        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
-        previewLayer.videoGravity = .resizeAspectFill
-        previewLayer.frame = view.bounds
-        
-        view.layer.addSublayer(previewLayer)
-        
-        // Start session
-        DispatchQueue.global(qos: .userInitiated).async {
-            if !session.isRunning {
-                session.startRunning()
-            }
-        }
+        // Store reference to update bounds later
+        context.coordinator.previewView = view
         
         return view
     }
     
     func updateUIView(_ uiView: UIView, context: Context) {
-        if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
-            previewLayer.frame = uiView.bounds
+        print("🐛 CameraPreviewView: Updating preview view, bounds: \(uiView.bounds)")
+        
+        // Update coordinator with current view
+        context.coordinator.previewView = uiView
+        
+        // Setup or update the preview layer
+        context.coordinator.setupPreviewLayer(for: viewModel.captureSession, in: uiView)
+    }
+    
+    func makeCoordinator() -> CameraPreviewCoordinator {
+        return CameraPreviewCoordinator()
+    }
+    
+    class CameraPreviewCoordinator: NSObject {
+        weak var previewView: UIView?
+        private var previewLayer: AVCaptureVideoPreviewLayer?
+        
+        func setupPreviewLayer(for session: AVCaptureSession?, in view: UIView) {
+            guard let session = session else {
+                print("🐛 CameraPreviewCoordinator: No capture session available")
+                return
+            }
+            
+            // Remove existing preview layer if present
+            if let existingLayer = previewLayer {
+                existingLayer.removeFromSuperlayer()
+                previewLayer = nil
+            }
+            
+            print("🐛 CameraPreviewCoordinator: Setting up preview layer with session")
+            
+            let newPreviewLayer = AVCaptureVideoPreviewLayer(session: session)
+            newPreviewLayer.videoGravity = .resizeAspectFill
+            newPreviewLayer.frame = view.bounds
+            
+            // Set background color for debugging
+            newPreviewLayer.backgroundColor = UIColor.red.cgColor
+            
+            view.layer.addSublayer(newPreviewLayer)
+            previewLayer = newPreviewLayer
+            
+            print("🐛 CameraPreviewCoordinator: Preview layer added with frame: \(newPreviewLayer.frame)")
+            
+            // Start session on background queue
+            DispatchQueue.global(qos: .userInitiated).async {
+                print("🐛 CameraPreviewCoordinator: Starting capture session...")
+                if !session.isRunning {
+                    session.startRunning()
+                    DispatchQueue.main.async {
+                        print("🐛 CameraPreviewCoordinator: Capture session started successfully")
+                        // Remove red background once session is running
+                        newPreviewLayer.backgroundColor = UIColor.clear.cgColor
+                    }
+                } else {
+                    print("🐛 CameraPreviewCoordinator: Capture session already running")
+                    DispatchQueue.main.async {
+                        newPreviewLayer.backgroundColor = UIColor.clear.cgColor
+                    }
+                }
+            }
+        }
+        
+        deinit {
+            previewLayer?.removeFromSuperlayer()
         }
     }
 }

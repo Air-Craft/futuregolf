@@ -44,8 +44,9 @@ struct ProgressCircle: Identifiable {
 
 // MARK: - Camera Configuration
 enum CameraConfiguration {
-    static let targetFrameRate: Double = 30.0  // Reduced from 120 to be compatible with more devices
-    static let minFrameRate: Double = 24.0     // Reduced from 60 to be compatible with more devices
+    static let preferredFrameRate: Double = 60.0  // Try for 60fps when device supports it
+    static let fallbackFrameRate: Double = 30.0   // Fallback to 30fps
+    static let minFrameRate: Double = 24.0        // Minimum acceptable frame rate
     static let resolution = AVCaptureSession.Preset.hd1920x1080
     static let videoFormat = AVFileType.mp4
     static let stillCaptureInterval: TimeInterval = 0.25
@@ -67,9 +68,11 @@ class RecordingViewModel: NSObject, ObservableObject {
     var cameraPosition: AVCaptureDevice.Position = .back
     var showPositioningIndicator = true
     var showProgressCircles = false
+    var currentFrameRate: Double = 0.0  // Actual achieved frame rate for display
     
     // MARK: - Camera Properties  
-    var targetFrameRate: Double { CameraConfiguration.targetFrameRate }
+    var preferredFrameRate: Double { CameraConfiguration.preferredFrameRate }
+    var fallbackFrameRate: Double { CameraConfiguration.fallbackFrameRate }
     var minFrameRate: Double { CameraConfiguration.minFrameRate }
     var resolution: AVCaptureSession.Preset { CameraConfiguration.resolution }
     var videoFormat: AVFileType { CameraConfiguration.videoFormat }
@@ -242,64 +245,50 @@ class RecordingViewModel: NSObject, ObservableObject {
         
         currentCamera = camera
         
-        // Configure camera settings with error handling
+        // Configure camera settings with advanced 60fps detection
         do {
             try camera.lockForConfiguration()
             
-            // Set frame rate based on device capabilities
-            let format = camera.activeFormat
-            let frameRateRanges = format.videoSupportedFrameRateRanges
-            print("🐛 RecordingViewModel: Available frame rate ranges: \(frameRateRanges)")
+            let (bestFormat, achievedFrameRate) = findBestCameraFormat(for: camera, position: position)
             
-            if let frameRateRange = frameRateRanges.first {
-                let maxFrameRate = frameRateRange.maxFrameRate
-                let minFrameRate = frameRateRange.minFrameRate
+            if let format = bestFormat {
+                print("🐛 RecordingViewModel: Setting optimal format for \(achievedFrameRate)fps")
+                camera.activeFormat = format
                 
-                print("🐛 RecordingViewModel: Device supports frame rates: \(minFrameRate) - \(maxFrameRate) FPS")
-                print("🐛 RecordingViewModel: Target frame rate: \(targetFrameRate) FPS")
-                
-                // Choose the best available frame rate within device limits
-                let actualFrameRate = min(targetFrameRate, maxFrameRate)
-                let finalFrameRate = max(minFrameRate, actualFrameRate)
-                
-                print("🐛 RecordingViewModel: Setting frame rate to: \(finalFrameRate) FPS")
-                
-                // Validate frame rate is supported before setting
-                if finalFrameRate >= minFrameRate && finalFrameRate <= maxFrameRate {
-                    let frameDuration = CMTime(value: 1, timescale: Int32(finalFrameRate))
+                // Set the frame rate
+                let frameDuration = CMTime(value: 1, timescale: Int32(achievedFrameRate))
+                if frameDuration.isValid && !frameDuration.isIndefinite {
+                    camera.activeVideoMinFrameDuration = frameDuration
+                    camera.activeVideoMaxFrameDuration = frameDuration
                     
-                    // Additional validation: check if duration is valid
-                    if frameDuration.isValid && !frameDuration.isIndefinite {
-                        camera.activeVideoMinFrameDuration = frameDuration
-                        camera.activeVideoMaxFrameDuration = frameDuration
-                        print("🐛 RecordingViewModel: Frame rate configuration completed successfully")
-                    } else {
-                        print("🐛 RecordingViewModel: Warning - Invalid frame duration, using device defaults")
-                    }
+                    // Update the actual achieved frame rate for UI display
+                    self.currentFrameRate = achievedFrameRate
+                    
+                    print("🐛 RecordingViewModel: Successfully configured camera for \(achievedFrameRate)fps")
                 } else {
-                    print("🐛 RecordingViewModel: Warning - Frame rate \(finalFrameRate) not in supported range, using device defaults")
+                    print("🐛 RecordingViewModel: Invalid frame duration, using device defaults")
+                    self.currentFrameRate = 30.0 // Default fallback
                 }
             } else {
-                print("🐛 RecordingViewModel: Warning - No frame rate ranges available, using device defaults")
+                print("🐛 RecordingViewModel: No suitable format found, using device defaults")
+                self.currentFrameRate = 30.0 // Default fallback
             }
+            
+            // Set focus mode
+            if camera.isFocusModeSupported(focusMode) {
+                camera.focusMode = focusMode
+            }
+            
+            // Set exposure mode
+            if camera.isExposureModeSupported(.continuousAutoExposure) {
+                camera.exposureMode = .continuousAutoExposure
+            }
+            
         } catch {
             print("🐛 RecordingViewModel: Error configuring camera: \(error)")
             camera.unlockForConfiguration()
             throw RecordingError.cameraHardwareError
         }
-        
-        // Set focus mode
-        if camera.isFocusModeSupported(focusMode) {
-            camera.focusMode = focusMode
-        }
-        
-        // Set exposure mode
-        if camera.isExposureModeSupported(.continuousAutoExposure) {
-            camera.exposureMode = .continuousAutoExposure
-        }
-        
-        // Enable image stabilization if available
-        // This will be set on the video connection later
         
         camera.unlockForConfiguration()
         
@@ -312,6 +301,96 @@ class RecordingViewModel: NSObject, ObservableObject {
         } else {
             throw RecordingError.cameraHardwareError
         }
+    }
+    
+    // MARK: - Advanced Camera Format Detection
+    
+    private func findBestCameraFormat(for camera: AVCaptureDevice, position: AVCaptureDevice.Position) -> (AVCaptureDevice.Format?, Double) {
+        let cameraName = position == .front ? "Front" : "Back"
+        print("🐛 RecordingViewModel: Analyzing \(cameraName) camera formats for optimal frame rate...")
+        
+        var bestFormat: AVCaptureDevice.Format?
+        var achievedFrameRate: Double = fallbackFrameRate
+        
+        // Priority order: try for 60fps first, then fallback to 30fps, then device max
+        let targetRates = [preferredFrameRate, fallbackFrameRate]
+        
+        for targetRate in targetRates {
+            print("🐛 RecordingViewModel: Searching for format supporting \(targetRate)fps...")
+            
+            for format in camera.formats {
+                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                let frameRateRanges = format.videoSupportedFrameRateRanges
+                
+                // Look for 1080p or higher resolution formats
+                let isHighRes = dimensions.width >= 1920 && dimensions.height >= 1080
+                
+                for range in frameRateRanges {
+                    if range.maxFrameRate >= targetRate && range.minFrameRate <= targetRate {
+                        // Found a format that supports our target frame rate
+                        let formatInfo = "Format: \(dimensions.width)x\(dimensions.height), FPS: \(range.minFrameRate)-\(range.maxFrameRate)"
+                        print("🐛 RecordingViewModel: Found compatible format - \(formatInfo)")
+                        
+                        // Prefer higher resolution if frame rate is supported
+                        if bestFormat == nil || (isHighRes && !isFormatHighRes(bestFormat!)) {
+                            bestFormat = format
+                            achievedFrameRate = targetRate
+                            print("🐛 RecordingViewModel: Selected format for \(targetRate)fps - \(formatInfo)")
+                        }
+                    }
+                }
+                
+                if bestFormat != nil && achievedFrameRate == preferredFrameRate {
+                    // Found 60fps format, no need to continue searching
+                    break
+                }
+            }
+            
+            if bestFormat != nil {
+                // Found a suitable format at this frame rate
+                break
+            }
+        }
+        
+        // If no format found, find the highest frame rate available
+        if bestFormat == nil {
+            print("🐛 RecordingViewModel: No format found for target rates, finding best available...")
+            var maxAvailableFrameRate: Double = 0
+            
+            for format in camera.formats {
+                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                let frameRateRanges = format.videoSupportedFrameRateRanges
+                
+                // Prefer 1080p or higher
+                let isHighRes = dimensions.width >= 1920 && dimensions.height >= 1080
+                
+                for range in frameRateRanges {
+                    if range.maxFrameRate > maxAvailableFrameRate || 
+                       (range.maxFrameRate == maxAvailableFrameRate && isHighRes && (bestFormat == nil || !isFormatHighRes(bestFormat!))) {
+                        bestFormat = format
+                        maxAvailableFrameRate = range.maxFrameRate
+                        achievedFrameRate = range.maxFrameRate
+                    }
+                }
+            }
+            
+            if let format = bestFormat {
+                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                print("🐛 RecordingViewModel: Using best available format: \(dimensions.width)x\(dimensions.height) at \(achievedFrameRate)fps")
+            }
+        }
+        
+        if bestFormat == nil {
+            print("🐛 RecordingViewModel: Warning - No suitable format found, using device default")
+            achievedFrameRate = fallbackFrameRate
+        }
+        
+        return (bestFormat, achievedFrameRate)
+    }
+    
+    private func isFormatHighRes(_ format: AVCaptureDevice.Format) -> Bool {
+        let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+        return dimensions.width >= 1920 && dimensions.height >= 1080
     }
     
     private func setupVideoOutput() {
