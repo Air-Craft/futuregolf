@@ -6,6 +6,7 @@ struct HomeView: View {
     @State private var showAnalysisView = false
     @State private var showDemoVideo = false
     @State private var showCoachingVideo = false
+    @State private var showRecordingScreen = false
     @State private var viewModel = VideoAnalysisViewModel()
     @State private var player: AVPlayer?
     
@@ -101,6 +102,11 @@ struct HomeView: View {
                         }
                 }
             }
+            .fullScreenCover(isPresented: $showRecordingScreen) {
+                NavigationStack {
+                    RecordingScreen()
+                }
+            }
         }
     }
     
@@ -148,7 +154,7 @@ struct HomeView: View {
         VStack(spacing: 16) {
             // Button 1: Analyze My Swing (Camera)
             Button(action: {
-                // TODO: Implement camera action
+                showRecordingScreen = true
                 LiquidGlassHaptics.impact(.medium)
             }) {
                 HStack {

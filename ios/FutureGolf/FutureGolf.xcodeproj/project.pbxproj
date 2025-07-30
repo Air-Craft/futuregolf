@@ -419,6 +419,10 @@
 				DEVELOPMENT_TEAM = 3TTWC3CWJ2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "This app allows you to upload videos from your media library";
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app uses the camera to video record your swing";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app uses the microphone so you can communicate with it and issue it commands";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses speech recognition to receive voice commands from you.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -452,6 +456,10 @@
 				DEVELOPMENT_TEAM = 3TTWC3CWJ2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "This app allows you to upload videos from your media library";
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app uses the camera to video record your swing";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app uses the microphone so you can communicate with it and issue it commands";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses speech recognition to receive voice commands from you.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
