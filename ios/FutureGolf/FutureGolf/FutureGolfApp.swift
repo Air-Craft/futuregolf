@@ -15,6 +15,11 @@ struct FutureGolfApp: App {
     // Debug flag for direct recording screen launch
     private let debugLaunchRecording = ProcessInfo.processInfo.environment["DEBUG_LAUNCH_RECORDING"] == "1"
     
+    init() {
+        // Test server connectivity at launch
+        testServerConnection()
+    }
+    
     var body: some Scene {
         WindowGroup {
             if debugLaunchRecording {
@@ -25,6 +30,57 @@ struct FutureGolfApp: App {
             } else {
                 // Normal app flow
                 HomeView()
+            }
+        }
+    }
+    
+    private func testServerConnection() {
+        print("🚀 APP LAUNCH: Testing server connectivity...")
+        print("🚀 Server URL: \(Config.serverBaseURL)")
+        
+        Task {
+            do {
+                // Test basic connectivity
+                let url = URL(string: "\(Config.serverBaseURL)/health")!
+                let (data, response) = try await URLSession.shared.data(from: url)
+                
+                if let httpResponse = response as? HTTPURLResponse {
+                    print("🚀 Server health check - Status: \(httpResponse.statusCode)")
+                    if let responseString = String(data: data, encoding: .utf8) {
+                        print("🚀 Server response: \(responseString)")
+                    }
+                }
+                
+                // Test TTS endpoint specifically
+                let ttsURL = URL(string: "\(Config.serverBaseURL)/api/v1/tts/coaching")!
+                var ttsRequest = URLRequest(url: ttsURL)
+                ttsRequest.httpMethod = "POST"
+                ttsRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                
+                let testBody = [
+                    "text": "Test",
+                    "voice": "onyx",
+                    "model": "tts-1-hd",
+                    "speed": 0.9
+                ]
+                ttsRequest.httpBody = try JSONSerialization.data(withJSONObject: testBody)
+                
+                print("🚀 Testing TTS endpoint...")
+                let startTime = Date()
+                let (ttsData, ttsResponse) = try await URLSession.shared.data(for: ttsRequest)
+                let elapsed = Date().timeIntervalSince(startTime)
+                
+                if let httpResponse = ttsResponse as? HTTPURLResponse {
+                    print("🚀 TTS test - Status: \(httpResponse.statusCode), Time: \(String(format: "%.2f", elapsed))s, Data size: \(ttsData.count) bytes")
+                }
+                
+            } catch {
+                print("🚀 ❌ Server test failed: \(error)")
+                print("🚀 Error type: \(type(of: error))")
+                if let urlError = error as? URLError {
+                    print("🚀 URLError code: \(urlError.code)")
+                    print("🚀 URLError description: \(urlError.localizedDescription)")
+                }
             }
         }
     }

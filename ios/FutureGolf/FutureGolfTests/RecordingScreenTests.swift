@@ -141,7 +141,7 @@ final class RecordingScreenTests: XCTestCase {
     func testStartRecordingTTS() {
         recordingViewModel.startRecording()
         
-        XCTAssertTrue(mockTTSService.spokenTexts.contains("Great. I'm now recording. Begin swinging when you are ready."), 
+        XCTAssertTrue(mockTTSService.spokenTexts.contains("Great. I'm now recording. Begin swinging when you're ready."), 
                      "Should speak start confirmation")
     }
     

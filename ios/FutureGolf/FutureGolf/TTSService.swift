@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 import Combine
 
-class TTSService: ObservableObject {
+class TTSService: NSObject, ObservableObject {
     static let shared = TTSService()
     
     private let serverURL = Config.serverBaseURL
@@ -13,15 +13,20 @@ class TTSService: ObservableObject {
     @Published var isPlaying = false
     @Published var isLoading = false
     
-    private init() {
+    // Fallback iOS TTS
+    private let speechSynthesizer = AVSpeechSynthesizer()
+    private var currentSpeechCompletion: ((Bool) -> Void)?
+    
+    private override init() {
+        super.init()
         configureAudioSession()
     }
     
     private func configureAudioSession() {
         do {
             // Use playAndRecord to be compatible with STT that might be running
-            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .spokenAudio, options: [.duckOthers, .defaultToSpeaker])
-            try AVAudioSession.sharedInstance().setActive(true)
+            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: [.duckOthers, .defaultToSpeaker])
+            try AVAudioSession.sharedInstance().setActive(true, options: [])
             print("🎵 TTS: Audio session configured successfully")
             print("🎵 TTS: Audio session category: \(AVAudioSession.sharedInstance().category)")
             print("🎵 TTS: Audio session mode: \(AVAudioSession.sharedInstance().mode)")
@@ -38,10 +43,15 @@ class TTSService: ObservableObject {
             return
         }
         
-        print("🎵 TTS: Received request to speak: '\(text)'")
+        let startTime = Date()
+        print("🎵 TTS: [\(startTime.timeIntervalSince1970)] Received request to speak: '\(text)'")
         
         // Add to queue and process
-        speechQueue.append((text, completion))
+        speechQueue.append((text, { success in
+            let totalTime = Date().timeIntervalSince(startTime)
+            print("🎵 TTS: Total time from request to completion: \(String(format: "%.2f", totalTime))s")
+            completion(success)
+        }))
         print("🎵 TTS: Added to queue. Queue size: \(speechQueue.count)")
         processNextInQueue()
     }
@@ -70,25 +80,30 @@ class TTSService: ObservableObject {
         
         Task {
             do {
-                print("🎵 TTS: Calling synthesizeSpeech...")
+                let synthesisStart = Date()
+                print("🎵 TTS: [\(synthesisStart.timeIntervalSince1970)] Calling synthesizeSpeech...")
                 let audioData = try await synthesizeSpeech(text: text)
-                print("🎵 TTS: Successfully synthesized \(audioData.count) bytes of audio data")
+                let synthesisTime = Date().timeIntervalSince(synthesisStart)
+                print("🎵 TTS: Successfully synthesized \(audioData.count) bytes in \(String(format: "%.2f", synthesisTime))s")
+                
                 await MainActor.run {
+                    let playbackStart = Date()
                     self.playAudio(data: audioData) { [weak self] success in
-                        print("🎵 TTS: Playback completed with success: \(success)")
+                        let playbackTime = Date().timeIntervalSince(playbackStart)
+                        print("🎵 TTS: Playback completed in \(String(format: "%.2f", playbackTime))s with success: \(success)")
                         completion(success)
                         self?.isProcessingQueue = false
                         self?.processNextInQueue()
                     }
                 }
             } catch {
-                print("🎵 TTS Error: \(error)")
-                await MainActor.run {
-                    self.isLoading = false
-                    completion(false)
-                    self.isProcessingQueue = false
-                    self.processNextInQueue()
-                }
+//                print("🎵 TTS Error: \(error) - Falling back to system TTS")
+//                await MainActor.run {
+//                    // Fallback to iOS built-in TTS
+//                    self.fallbackToSystemTTS(text: text, completion: completion)
+//                    self.isProcessingQueue = false
+//                    self.processNextInQueue()
+//                }
             }
         }
     }
@@ -111,16 +126,21 @@ class TTSService: ObservableObject {
         
         print("🎵 TTS: Request body: \(requestBody)")
         
+        // Use default URLSession configuration
+        let session = URLSession.shared
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(requestBody)
         
-        print("🎵 TTS: Sending POST request to \(url)")
+        let networkStart = Date()
+        print("🎵 TTS: [\(networkStart.timeIntervalSince1970)] Sending POST request to \(url)")
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
+        let networkTime = Date().timeIntervalSince(networkStart)
         
-        print("🎵 TTS: Received response with \(data.count) bytes")
+        print("🎵 TTS: Received response with \(data.count) bytes in \(String(format: "%.2f", networkTime))s")
         
         guard let httpResponse = response as? HTTPURLResponse else {
             print("🎵 TTS: Invalid response type")
@@ -143,11 +163,24 @@ class TTSService: ObservableObject {
     
     private func playAudio(data: Data, completion: @escaping (Bool) -> Void) {
         do {
-            print("Creating AVAudioPlayer with \(data.count) bytes of audio data")
+            print("🎵 TTS: Creating AVAudioPlayer with \(data.count) bytes of audio data")
+            
+            // Reconfigure audio session for playback
+            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: [.duckOthers, .defaultToSpeaker])
+            try AVAudioSession.sharedInstance().setActive(true, options: [])
+            
             audioPlayer = try AVAudioPlayer(data: data)
+            audioPlayer?.volume = 1.0  // Maximum volume
+            audioPlayer?.prepareToPlay()
+            
+            print("🎵 TTS: Audio player created. Format: \(audioPlayer?.format.debugDescription ?? "unknown")")
+            print("🎵 TTS: Audio player duration: \(audioPlayer?.duration ?? 0) seconds")
+            print("🎵 TTS: Audio player volume: \(audioPlayer?.volume ?? 0)")
+            print("🎵 TTS: Device volume: \(AVAudioSession.sharedInstance().outputVolume)")
+            
             audioPlayerDelegate = AudioPlayerDelegate { [weak self] success in
                 DispatchQueue.main.async {
-                    print("Audio playback finished with success: \(success)")
+                    print("🎵 TTS: Audio playback finished with success: \(success)")
                     self?.isPlaying = false
                     self?.isLoading = false
                     self?.audioPlayerDelegate = nil
@@ -159,12 +192,19 @@ class TTSService: ObservableObject {
             isLoading = false
             isPlaying = true
             
-            print("Starting audio playback...")
+            print("🎵 TTS: Starting audio playback...")
             let didStart = audioPlayer?.play() ?? false
-            print("Audio player play() returned: \(didStart)")
+            print("🎵 TTS: Audio player play() returned: \(didStart)")
+            
+            if !didStart {
+                print("🎵 TTS: Failed to start playback, checking audio player state")
+                print("🎵 TTS: Audio player isPlaying: \(audioPlayer?.isPlaying ?? false)")
+                print("🎵 TTS: Audio session category: \(AVAudioSession.sharedInstance().category)")
+                print("🎵 TTS: Audio session isOtherAudioPlaying: \(AVAudioSession.sharedInstance().isOtherAudioPlaying)")
+            }
             
         } catch {
-            print("Failed to play audio: \(error)")
+            print("🎵 TTS: Failed to play audio: \(error)")
             isLoading = false
             completion(false)
         }
@@ -182,6 +222,11 @@ class TTSService: ObservableObject {
         stopCurrentPlayback()
         speechQueue.removeAll()
         isProcessingQueue = false
+        
+        // Also stop system TTS if it's running
+        if speechSynthesizer.isSpeaking {
+            speechSynthesizer.stopSpeaking(at: .immediate)
+        }
     }
     
     func pauseSpeaking() {
@@ -196,6 +241,49 @@ class TTSService: ObservableObject {
     
     var isSpeaking: Bool {
         return isPlaying || isLoading
+    }
+    
+    // MARK: - Fallback System TTS
+    
+    private func fallbackToSystemTTS(text: String, completion: @escaping (Bool) -> Void) {
+        print("🎵 TTS: Using iOS system TTS as fallback")
+        
+        // Stop any existing speech
+        if speechSynthesizer.isSpeaking {
+            speechSynthesizer.stopSpeaking(at: .immediate)
+        }
+        
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.rate = 0.5  // Slightly slower than default
+        utterance.volume = 1.0
+        
+        currentSpeechCompletion = completion
+        speechSynthesizer.delegate = self
+        
+        isLoading = false
+        isPlaying = true
+        
+        speechSynthesizer.speak(utterance)
+    }
+    
+}
+
+// MARK: - AVSpeechSynthesizerDelegate
+
+extension TTSService: AVSpeechSynthesizerDelegate {
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        print("🎵 TTS: System TTS finished speaking")
+        isPlaying = false
+        currentSpeechCompletion?(true)
+        currentSpeechCompletion = nil
+    }
+    
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        print("🎵 TTS: System TTS was cancelled")
+        isPlaying = false
+        currentSpeechCompletion?(false)
+        currentSpeechCompletion = nil
     }
 }
 

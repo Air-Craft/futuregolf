@@ -50,7 +50,6 @@ enum CameraConfiguration {
     static let resolution = AVCaptureSession.Preset.hd1920x1080
     static let videoFormat = AVFileType.mp4
     static let stillCaptureInterval: TimeInterval = 0.25
-    static let recordingTimeout: TimeInterval = 180.0 // 3 minutes
 }
 
 @MainActor
@@ -65,7 +64,7 @@ class RecordingViewModel: NSObject, ObservableObject {
     var progressCircles: [ProgressCircle] = []
     var errorType: RecordingError?
     var isLeftHandedMode = false
-    var cameraPosition: AVCaptureDevice.Position = .back
+    var cameraPosition: AVCaptureDevice.Position = .front
     var showPositioningIndicator = true
     var showProgressCircles = false
     var currentFrameRate: Double = 0.0  // Actual achieved frame rate for display
@@ -80,10 +79,10 @@ class RecordingViewModel: NSObject, ObservableObject {
     var isAutoFocusEnabled = true
     var focusMode: AVCaptureDevice.FocusMode = .continuousAutoFocus
     var stillCaptureInterval: TimeInterval { CameraConfiguration.stillCaptureInterval }
-    var recordingTimeout: TimeInterval = CameraConfiguration.recordingTimeout
+    var recordingTimeout: TimeInterval { Config.recordingTimeout }
     
     // MARK: - Configuration
-    let targetSwingCount = 3
+    var targetSwingCount: Int { Config.targetSwingCount }
     
     // MARK: - Services
     var ttsService: TTSService = TTSService.shared
@@ -151,12 +150,15 @@ class RecordingViewModel: NSObject, ObservableObject {
     }
     
     private func handleVoiceCommand(_ command: VoiceCommand) {
-        guard currentPhase == .setup else { return }
-        
         switch command {
         case .startRecording:
+            guard currentPhase == .setup else { return }
             print("🎤 Voice command received: Start Recording")
             startRecording()
+        case .stopRecording:
+            guard currentPhase == .recording else { return }
+            print("🎤 Voice command received: Stop Recording")
+            finishRecording()
         }
     }
     
@@ -484,7 +486,7 @@ class RecordingViewModel: NSObject, ObservableObject {
         startTimeoutTimer()
         
         // Play TTS confirmation
-        ttsService.speakText("Great. I'm now recording. Begin swinging when you are ready.")
+        ttsService.speakText("Great. I'm now recording. Begin swinging when you're ready.")
         
         onRecordingStarted?()
     }

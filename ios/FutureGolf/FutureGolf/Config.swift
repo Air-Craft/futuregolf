@@ -25,6 +25,12 @@ struct Config {
         static let fallbackFrameRate: Double = 30.0
     }
     
+    /// Recording timeout in seconds (3 minutes)
+    static let recordingTimeout: TimeInterval = 180.0
+    
+    /// Target number of swings to record
+    static let targetSwingCount = 3
+    
     // MARK: - Debug Configuration
     
     /// Enable debug logging

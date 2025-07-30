@@ -301,6 +301,8 @@ struct RecordingScreen: View {
             do {
                 try await viewModel.setupCamera()
                 try await viewModel.startVoiceRecognition()
+                // Play welcome message once setup is complete
+                viewModel.ttsService.speakText("Alright. Get yourself into a position where we can see your whole swing, and let me know when you're ready.")
             } catch {
                 handleSetupError(error)
             }

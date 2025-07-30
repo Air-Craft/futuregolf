@@ -19,7 +19,7 @@ class OnDeviceSTTService: NSObject, ObservableObject {
     private let audioEngine = AVAudioEngine()
     
     // Command detection
-    private let commandPatterns = [
+    private let startCommandPatterns = [
         "begin",
         "start",
         "i'm ready",
@@ -27,6 +27,15 @@ class OnDeviceSTTService: NSObject, ObservableObject {
         "do it",
         "record",
         "recording"
+    ]
+    
+    private let stopCommandPatterns = [
+        "stop",
+        "finish",
+        "done",
+        "that's enough",
+        "end recording",
+        "stop recording"
     ]
     
     private override init() {
@@ -205,10 +214,21 @@ class OnDeviceSTTService: NSObject, ObservableObject {
         let lowercased = transcript.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         
         // Check if transcript contains any of our command patterns
-        for pattern in commandPatterns {
+        // Check for stop commands first (higher priority when recording)
+        for pattern in stopCommandPatterns {
             if lowercased.contains(pattern) {
                 if Config.isDebugEnabled {
-                    print("Detected command pattern '\(pattern)' in: '\(transcript)'")
+                    print("Detected stop command pattern '\(pattern)' in: '\(transcript)'")
+                }
+                return .stopRecording
+            }
+        }
+        
+        // Check for start commands
+        for pattern in startCommandPatterns {
+            if lowercased.contains(pattern) {
+                if Config.isDebugEnabled {
+                    print("Detected start command pattern '\(pattern)' in: '\(transcript)'")
                 }
                 return .startRecording
             }
@@ -235,11 +255,14 @@ extension OnDeviceSTTService: SFSpeechRecognizerDelegate {
 
 enum VoiceCommand: Equatable {
     case startRecording
+    case stopRecording
     
     var description: String {
         switch self {
         case .startRecording:
             return "Start Recording"
+        case .stopRecording:
+            return "Stop Recording"
         }
     }
 }
