@@ -15,6 +15,25 @@ When lacking context about what to do next or how to implement features, ALWAYS 
 
 These specifications contain the authoritative requirements and implementation details organized by functional domain.
 
+## Development Documentation
+
+For implementation details and troubleshooting, check the development docs:
+
+### Frontend Development
+- **`Docs/Dev/Frontend/ON_DEVICE_STT.md`** - On-device speech recognition implementation
+- **`Docs/Dev/Frontend/TTS_SERVICE.md`** - Text-to-speech service configuration
+- **`Docs/Dev/Frontend/CAMERA_CONFIGURATION.md`** - Camera setup and frame rate optimization
+
+### Backend Development
+- **`Docs/Dev/Backend/`** - API design, authentication, database models, storage
+
+### Troubleshooting
+- **`Docs/Dev/TROUBLESHOOTING.md`** - Common issues and solutions, debug features
+- **`Docs/Dev/DEBUG_FEATURES.md`** - Debug tools and environment variables
+
+### DevOps
+- **`Docs/Dev/DEVOPS.md`** - Deployment and infrastructure
+
 ## Project Overview
 
 FutureGolf is an AI-powered golf swing analyzer mobile application that records golf swings, analyzes them using AI, and provides personalized coaching feedback with advanced text-to-speech capabilities.
