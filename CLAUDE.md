@@ -9,7 +9,7 @@ When lacking context about what to do next or how to implement features, ALWAYS 
 1. **`Spec/OVERVIEW.md`** - Core project vision, tech stack, and development strategy
 2. **Domain-specific specifications** based on your work area:
    - **Backend work**: Check `Spec/Backend/` for API design, AI analysis, auth, database, storage
-   - **Frontend work**: Check `Spec/Frontend/` for user journey, video recording/playback, TTS, navigation
+   - **iOS work**: Check `Spec/Frontend/` for user journey, video recording/playback, TTS, navigation
    - **Business logic**: Check `Spec/Business/` for subscription model and monetization
    - **Testing**: Check `Spec/Testing/` for testing strategy and scenarios
 3. Always follow the development guidelines in `Docs/Spec/DEVELOPMENT_GUIDELINES.md`. If guidance is not explicit in this document, follow industry best practices, researching those online if need be first. 
@@ -21,7 +21,7 @@ These specifications contain the authoritative requirements and implementation d
 
 For implementation details and troubleshooting, check the development docs:
 
-### Frontend Development
+### iOS Development
 - **`Docs/Dev/Frontend/ON_DEVICE_STT.md`** - On-device speech recognition implementation
 - **`Docs/Dev/Frontend/TTS_SERVICE.md`** - Text-to-speech service configuration
 - **`Docs/Dev/Frontend/CAMERA_CONFIGURATION.md`** - Camera setup and frame rate optimization
@@ -46,13 +46,13 @@ See Spec/OVERVIEW.md for more details
 
 ### Components
 
-#### Frontend
-Swift/iOS (latest)
+#### iOS App
+Swift/iOS (latest) with Liquid Glass Framework
 
 #### Backend
 Python v3.10
 
-IMPORTANT: For backend be sure to source `source .venv/bin/activate`. If the venv does not exist then create it based on python 3.10.x. Install it with pyenv if 3.10 is not available.
+IMPORTANT: For backend use PDM for dependency management. Run `pdm install` to install dependencies and `pdm run python` to execute Python scripts. Ensure Python 3.10 is set with pyenv.
 
 
 ### Methodology
@@ -65,6 +65,6 @@ This project follows E2D TDD (End-to-End Test-Driven Development) methodology. A
 
 * Backend functional complete more or less.
 
-* Frontend being reworked in iOS. Some prototyping in place but final designs and flows not implemented.
+* iOS app development in progress. Core features implemented, final designs and flows being refined.
 
 

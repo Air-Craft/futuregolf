@@ -29,15 +29,9 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Node.js
-frontend/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Expo
-frontend/.expo/
-frontend/ios/build/
-frontend/ios/Pods/
 
 # Test Results
 backend/test_results/

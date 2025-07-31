@@ -4,14 +4,12 @@
   "description": "AI-powered golf swing analyzer",
   "scripts": {
     "start": "./start.sh",
-    "backend": "cd backend && source .venv/bin/activate && python start_server.py",
-    "frontend": "cd frontend && npx expo start --ios",
-    "setup": "cd backend && python -m .venv .venv && source .venv/bin/activate && pip install -r requirements.txt && cd ../frontend && npm install",
-    "test": "cd frontend && npm test",
-    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
-    "install-deps": "cd backend && pip install -r requirements.txt && cd ../frontend && npm install",
-    "analyze-video": "source backend/.venv/bin/activate && python backend/analyze_video.py",
-    "analyze-video-pro": "source backend/.venv/bin/activate && python backend/analyze_video.py --model gemini-2.5-pro"
+    "backend": "cd backend && pdm run python start_server.py",
+    "setup": "cd backend && pyenv local 3.10 && pdm install",
+    "dev": "npm run backend",
+    "install-deps": "cd backend && pdm install",
+    "analyze-video": "cd backend && pdm run python analyze_video.py",
+    "analyze-video-pro": "cd backend && pdm run python analyze_video.py --model gemini-2.5-pro"
   },
   "keywords": ["golf", "ai", "swing-analysis", "mobile-app"],
   "author": "FutureGolf Team",

@@ -24,8 +24,7 @@ npm start
 make setup
 
 # Or manually:
-cd backend && python -m ..venv ..venv && source ..venv/bin/activate && pip install -r requirements.txt
-cd ../frontend && npm install
+cd backend && pdm install
 ```
 
 ## Individual Services
@@ -36,17 +35,9 @@ cd ../frontend && npm install
 make backend
 
 # Option 2: Direct
-cd backend && source ..venv/bin/activate && python start_server.py
+cd backend && pdm run python start_server.py
 ```
 
-### Frontend Only
-```bash
-# Option 1: Make
-make frontend
-
-# Option 2: Direct
-cd frontend && npx expo start --ios
-```
 
 ## Configuration
 
@@ -75,21 +66,9 @@ Running on Neon. Ask Quinn for this or setup your own (its free).
 GEMINI_API_KEY=...
 ```
 
-#### Frontend Configuration
-Edit `frontend/.env`:
-```bash
-# Development API Configuration
-DEV_API_HOST=192.168.1.228
-DEV_API_PORT=8000
-EXPO_PUBLIC_API_BASE_URL=http://192.168.1.228:8000/api/v1
-
-# Environment
-NODE_ENV=development
-```
 
 ### Service URLs
 - **Backend**: http://localhost:8000
-- **Frontend**: http://localhost:8081
 - **API Docs**: http://localhost:8000/docs
 
 ## Device Testing 📱
@@ -106,7 +85,6 @@ NODE_ENV=development
 
 2. **Update environment files with your IP**:
    - `backend/.env`: Add your IP to `CORS_ORIGINS`
-   - `frontend/.env`: Set `EXPO_PUBLIC_API_BASE_URL=http://YOUR_IP:8000/api/v1`
 
 3. **Start services**:
    ```bash
@@ -114,8 +92,7 @@ NODE_ENV=development
    ```
 
 4. **Connect device**:
-   - Install **Expo Go** app on your phone
-   - Scan the QR code that appears in terminal
+   - Build and install the iOS app from Xcode
    - App will connect to your local backend server
 
 ### Testing TTS on Device
@@ -158,14 +135,15 @@ NODE_ENV=development
 
 ### Architecture
 - **Backend**: FastAPI + PostgreSQL + OpenAI TTS + Google Gemini
-- **Frontend**: React Native + Expo + Custom TTS Widget + Audio Analysis
+- **iOS App**: Swift + Liquid Glass Framework + Custom TTS Widget
 - **Database**: Neon PostgreSQL with JSONB analysis storage
 - **AI**: Google Gemini (video analysis) + OpenAI (TTS) + MediaPipe (pose detection)
 - **Storage**: Google Cloud Storage for video files
+- **Package Management**: PDM for Python dependency management
 
 ### Tech Stack
 - **Backend**: Python, FastAPI, SQLAlchemy, OpenAI API, Google Gemini
-- **Frontend**: React Native, Expo, Expo AV, Custom Audio Analysis
+- **iOS**: Swift, Liquid Glass, AVFoundation, Custom Audio Analysis
 - **Database**: PostgreSQL (Neon) with JSONB fields
 - **AI/ML**: Google Gemini AI, OpenAI TTS, MediaPipe Pose Detection
 - **Audio**: Real-time RMS analysis, synchronized animations
@@ -175,7 +153,7 @@ NODE_ENV=development
 ### Common Issues
 1. **TTS Not Working**: Check `OPENAI_API_KEY` in `.env`
 2. **Backend Won't Start**: Check if port 8000 is available
-3. **Frontend Won't Start**: Try `npx expo start --clear`
+3. **iOS Build Issues**: Check Xcode project settings and dependencies
 
 ### Cleanup
 ```bash
@@ -193,14 +171,20 @@ pkill -f "expo start"
 # Development
 make start       # Start both services
 make backend     # Start backend only
-make frontend    # Start frontend only
-make setup       # Setup environment
+make setup       # Setup environment (sets Python 3.10, installs PDM dependencies)
 make clean       # Stop all services
 make help        # Show help
 
 # Scripts
 ./start.sh       # All-in-one startup
 npm start        # Alternative startup
+
+# Backend with PDM
+cd backend && pdm install    # Install dependencies
+cd backend && pdm run python start_server.py    # Run backend
+
+# iOS Development
+cd ios/FutureGolf && open FutureGolf.xcodeproj    # Open in Xcode
 ```
 
 ## Status

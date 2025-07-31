@@ -12,15 +12,10 @@ AI-powered mobile app that records golf swings, analyzes them using AI, and prov
 
 ## Tech Stack
 
-### Frontend
-- **iOS/Swift** with SwiftUI and LiquidGlass styling
-- **TTS** using OpenAI Whisper fast text-to-speech
-
-
-### Former front-end stack 
-(which we might resurrect at some point but ignore for now)
-- **React Native** with Expo for cross-platform mobile development
-- **Expo AV** for audio playback and analysis
+### iOS App
+- **Swift/iOS** with SwiftUI and LiquidGlass styling
+- **TTS** using OpenAI text-to-speech API
+- **AVFoundation** for audio/video playback and recording
 
 ### Backend
 - **Python** with FastAPI (production-ready)
@@ -52,7 +47,7 @@ AI-powered mobile app that records golf swings, analyzes them using AI, and prov
 
 ### Domain-Specific Specifications
 - **Spec/Backend/** - API design, AI analysis, authentication, database models, file storage
-- **Spec/Frontend/** - User journey, video recording/playback, TTS integration, navigation
+- **Spec/Frontend/** - iOS user journey, video recording/playback, TTS integration, navigation
 - **Spec/Business/** - Subscription model, monetization strategy
 - **Spec/Testing/** - Detailed testing strategy, scenarios, and MCP integration
 

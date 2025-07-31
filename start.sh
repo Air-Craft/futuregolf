@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # FutureGolf - Startup Script
-# Starts both backend and frontend services
+# Starts backend service with PDM
 
 set -e
 
@@ -28,7 +28,7 @@ print_error() {
 }
 
 # Check if we're in the right directory
-if [ ! -d "backend" ] || [ ! -d "frontend" ]; then
+if [ ! -d "backend" ]; then
     print_error "Please run this script from the FutureGolf root directory"
     exit 1
 fi
@@ -43,15 +43,8 @@ cleanup() {
         print_status "Backend stopped"
     fi
     
-    # Kill frontend process
-    if [ ! -z "$FRONTEND_PID" ]; then
-        kill $FRONTEND_PID 2>/dev/null || true
-        print_status "Frontend stopped"
-    fi
-    
-    # Kill any remaining processes
+        # Kill any remaining processes
     pkill -f "python start_server.py" 2>/dev/null || true
-    pkill -f "expo start" 2>/dev/null || true
     
     print_status "All services stopped"
     exit 0
@@ -64,13 +57,14 @@ print_status "Starting backend server..."
 
 # Start backend in background
 cd backend
-if [ ! -d ".venv" ]; then
-    print_error "Virtual environment not found. Please run: cd backend && python -m .venv .venv && source .venv/bin/activate && pip install -r requirements.txt"
+# Check if PDM is installed
+if ! command -v pdm &> /dev/null; then
+    print_error "PDM not found. Please install PDM first: pip install pdm"
     exit 1
 fi
 
-source .venv/bin/activate
-python start_server.py &
+# Run with PDM
+pdm run python start_server.py &
 BACKEND_PID=$!
 
 print_status "Backend started (PID: $BACKEND_PID)"
@@ -84,31 +78,21 @@ if ! curl -s http://localhost:8000/health > /dev/null; then
     print_warning "Backend may not be ready yet, continuing anyway..."
 fi
 
-print_status "Starting frontend..."
-
-# Start frontend
-cd ../frontend
-npx expo start --ios &
-FRONTEND_PID=$!
-
-print_status "Frontend started (PID: $FRONTEND_PID)"
-
 # Print status
 echo
 echo -e "${BLUE}🎉 FutureGolf is starting up!${NC}"
 echo
 echo -e "${GREEN}Backend:${NC}  http://localhost:8000 (local)"
 echo -e "${GREEN}Backend:${NC}  http://192.168.1.228:8000 (network)"
-echo -e "${GREEN}Frontend:${NC} http://localhost:8081"
-echo -e "${GREEN}Simulator:${NC} iOS Simulator should open automatically"
+echo -e "${GREEN}API Docs:${NC} http://localhost:8000/docs"
 echo
-echo -e "${BLUE}📱 For device testing:${NC}"
-echo -e "${GREEN}1.${NC} Install Expo Go app on your device"
-echo -e "${GREEN}2.${NC} Scan the QR code that appears"
+echo -e "${BLUE}📱 For iOS development:${NC}"
+echo -e "${GREEN}1.${NC} Open ios/FutureGolf/FutureGolf.xcodeproj in Xcode"
+echo -e "${GREEN}2.${NC} Build and run on simulator or device"
 echo -e "${GREEN}3.${NC} App will connect to http://192.168.1.228:8000"
 echo
 echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}"
 echo
 
-# Wait for both processes
-wait $BACKEND_PID $FRONTEND_PID
+# Wait for backend process
+wait $BACKEND_PID
