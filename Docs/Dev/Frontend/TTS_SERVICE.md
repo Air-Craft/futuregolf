@@ -1,7 +1,11 @@
 # Text-to-Speech (TTS) Service
 
 ## Overview
-The TTS service provides voice feedback using a backend OpenAI-based API with queuing and audio session management.
+The TTS service provides voice feedback using a backend OpenAI-based API with queuing and audio session management. The service includes an intelligent caching system that pre-generates common audio phrases for instant playback during the recording journey.
+
+## Related Documentation
+- [TTS Caching System](./TTS_CACHING.md) - Details on the audio caching implementation
+- [Connectivity Service](./CONNECTIVITY_SERVICE.md) - Network monitoring for TTS operations
 
 ## Configuration
 
@@ -20,6 +24,10 @@ The TTS service provides voice feedback using a backend OpenAI-based API with qu
 }
 ```
 
+### Timeout Configuration
+- Synthesis timeout: `Config.ttsSynthesisTimeout` (default: 20.0 seconds)
+- Configurable via Config.swift for all network operations
+
 ## Audio Session Setup
 
 The service uses `.playAndRecord` mode with:
@@ -31,6 +39,27 @@ The service uses `.playAndRecord` mode with:
 - Speech requests are queued to prevent overlapping
 - Sequential processing ensures one utterance at a time
 - Queue can be cleared with `stopSpeaking()`
+
+## Caching System
+
+The TTS service includes automatic caching for frequently used phrases:
+
+### Cache Features
+- Pre-generates audio on app launch for instant playback
+- Daily cache refresh (configurable)
+- Atomic cache updates ensure continuous availability
+- Network-aware: postpones operations when offline
+- Progress tracking in DEBUG mode
+
+### Cached Phrases
+All recording journey instructions are cached:
+- Setup positioning
+- Recording started
+- Swing feedback (1st, 2nd)
+- Recording complete
+- Timeout message
+
+See [TTS Caching Documentation](./TTS_CACHING.md) for implementation details.
 
 ## Network Configuration
 
@@ -61,4 +90,20 @@ viewModel.ttsService.speakText("Alright. Get yourself into a position where we c
 
 ## Debugging
 
-Enable verbose logging by checking console output for lines prefixed with "🎵 TTS:"
+### Log Prefixes
+- `🗣️ TTS:` - General TTS operations
+- `🗣️💾 TTS Cache:` - Cache-related operations
+
+### Environment Variables
+- `TTS_FORCE_REFRESH=1` - Force cache refresh on launch
+- `DEBUG_MODE=1` - Enable progress toasts and verbose logging
+
+### Debug Commands
+```swift
+// Check cache status
+TTSService.shared.cacheManager.debugListCachedFiles()
+
+// Force cache refresh
+TTSService.shared.cacheManager.clearCache()
+TTSService.shared.cacheManager.warmCache()
+```

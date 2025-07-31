@@ -16,6 +16,9 @@ class TTSCacheManager: ObservableObject {
     @Published var isCacheWarming = false
     @Published var cacheWarmingProgress: Double = 0.0
     
+    private var connectivityCallbackId: UUID?
+    private var progressToastId: UUID?
+    
     // MARK: - Initialization
     
     init() {
@@ -26,39 +29,83 @@ class TTSCacheManager: ObservableObject {
         
         // Create directories if needed
         createDirectoriesIfNeeded()
+        
+        // Setup connectivity monitoring
+        setupConnectivityMonitoring()
+    }
+    
+    deinit {
+        if let id = connectivityCallbackId {
+            Task { @MainActor in
+                ConnectivityService.shared.removeCallback(id)
+            }
+        }
     }
     
     // MARK: - Public Methods
     
     /// Warm the cache by pre-generating all recording journey audio
     func warmCache() {
-        print("🗣️💾 TTS Cache: Starting cache warm-up process...")
-        print("🗣️💾 TTS Cache: Total phrases to cache: \(TTSPhrases.allCases.count)")
-        
-        // Check if force refresh is enabled
-        if Config.ttsForceCacheRefreshOnLaunch {
-            print("🗣️💾 TTS Cache: Force refresh enabled, clearing existing cache")
-            clearCache()
-        }
-        
-        // Check existing cache
-        if let metadata = loadMetadata() {
-            let age = Date().timeIntervalSince(metadata.lastRefresh)
-            print("🗣️💾 TTS Cache: Found existing cache, age: \(String(format: "%.1f", age/3600)) hours")
-            print("🗣️💾 TTS Cache: Cached phrases count: \(metadata.phrases.count)")
+        Task { @MainActor in
+            print("🗣️💾 TTS Cache: Starting cache warm-up process...")
             
-            if !shouldRefreshCache() {
-                print("🗣️💾 TTS Cache: Cache is fresh, skipping refresh")
+            // Check connectivity first
+            guard ConnectivityService.shared.isConnected else {
+                print("🗣️💾 TTS Cache: No network connection available, postponing cache warm-up")
+                
+                // Register for connectivity restoration if cache needs refresh
+                if shouldRefreshCache() {
+                    print("🗣️💾 TTS Cache: Registering for connectivity restoration callback")
+                    registerForConnectivityRestoration()
+                }
                 return
-            } else {
-                print("🗣️💾 TTS Cache: Cache needs refresh (interval: \(Config.ttsCacheRefreshInterval/3600) hours)")
             }
-        } else {
-            print("🗣️💾 TTS Cache: No existing cache found, creating new cache")
+            
+            print("🗣️💾 TTS Cache: Network connected, proceeding with cache check")
+            print("🗣️💾 TTS Cache: Total phrases to cache: \(TTSPhrases.allCases.count)")
+            
+            // Check if force refresh is enabled
+            if Config.ttsForceCacheRefreshOnLaunch {
+                print("🗣️💾 TTS Cache: Force refresh enabled, clearing existing cache")
+                clearCache()
+            }
+            
+            // Check existing cache
+            if let metadata = loadMetadata() {
+                let age = Date().timeIntervalSince(metadata.lastRefresh)
+                print("🗣️💾 TTS Cache: Found existing cache, age: \(String(format: "%.1f", age/3600)) hours")
+                print("🗣️💾 TTS Cache: Cached phrases count: \(metadata.phrases.count)")
+                
+                // Verify cached files actually exist
+                var validPhrases = 0
+                for (_, phrase) in metadata.phrases {
+                    let audioFile = audioDirectory.appendingPathComponent(phrase.filename)
+                    if FileManager.default.fileExists(atPath: audioFile.path) {
+                        validPhrases += 1
+                    }
+                }
+                
+                if validPhrases != metadata.phrases.count {
+                    print("🗣️💾 TTS Cache: Cache inconsistent - expected \(metadata.phrases.count) files, found \(validPhrases)")
+                    print("🗣️💾 TTS Cache: Forcing cache refresh due to missing files")
+                    clearCache()
+                    refreshCacheInBackground()
+                    return
+                }
+                
+                if !shouldRefreshCache() {
+                    print("🗣️💾 TTS Cache: Cache is fresh and valid, skipping refresh")
+                    return
+                } else {
+                    print("🗣️💾 TTS Cache: Cache needs refresh (interval: \(Config.ttsCacheRefreshInterval/3600) hours)")
+                }
+            } else {
+                print("🗣️💾 TTS Cache: No existing cache found, creating new cache")
+            }
+            
+            print("🗣️💾 TTS Cache: Starting background refresh...")
+            refreshCacheInBackground()
         }
-        
-        print("🗣️💾 TTS Cache: Starting background refresh...")
-        refreshCacheInBackground()
     }
     
     /// Get cached audio data for a given text
@@ -173,6 +220,51 @@ class TTSCacheManager: ObservableObject {
     
     // MARK: - Private Methods
     
+    private func setupConnectivityMonitoring() {
+        Task { @MainActor in
+            // Register for connectivity restoration
+            connectivityCallbackId = ConnectivityService.shared.onConnectivityRestored { [weak self] in
+                guard let self = self else { return }
+                
+                // Check if we have pending cache warming
+                if !self.isCacheWarming && self.shouldRefreshCache() {
+                    print("🗣️💾 TTS Cache: Connectivity restored, starting cache warm-up")
+                    self.warmCache()
+                }
+            }
+        }
+    }
+    
+    private func registerForConnectivityRestoration() {
+        // Only register if not already registered
+        guard connectivityCallbackId == nil else { 
+            print("🗣️💾 TTS Cache: Already registered for connectivity restoration")
+            return 
+        }
+        
+        Task { @MainActor in
+            connectivityCallbackId = ConnectivityService.shared.onConnectivityRestored { [weak self] in
+                guard let self = self else { return }
+                
+                print("🗣️💾 TTS Cache: Connectivity restored callback triggered")
+                
+                // Remove the callback after it's used
+                if let id = self.connectivityCallbackId {
+                    ConnectivityService.shared.removeCallback(id)
+                    self.connectivityCallbackId = nil
+                }
+                
+                // Start cache warming
+                if !self.isCacheWarming && self.shouldRefreshCache() {
+                    print("🗣️💾 TTS Cache: Starting cache warm-up after connectivity restored")
+                    self.warmCache()
+                }
+            }
+            
+            print("🗣️💾 TTS Cache: Registered for connectivity restoration with ID: \(String(describing: connectivityCallbackId))")
+        }
+    }
+    
     private func createDirectoriesIfNeeded() {
         for directory in [cacheDirectory, audioDirectory, tempDirectory] {
             do {
@@ -187,10 +279,17 @@ class TTSCacheManager: ObservableObject {
         Task {
             print("🗣️💾 TTS Cache: Task started for background cache refresh")
             
+            // Note: Connectivity is already checked in warmCache(), so we can proceed here
+            
             await MainActor.run {
                 isCacheWarming = true
                 cacheWarmingProgress = 0.0
                 print("🗣️💾 TTS Cache: Set isCacheWarming to true")
+                
+                #if DEBUG
+                // Show progress toast
+                progressToastId = ToastManager.shared.showProgress("Caching TTS...", progress: 0.0)
+                #endif
             }
             
             print("🗣️💾 TTS Cache: Beginning background cache refresh for \(TTSPhrases.allCases.count) phrases")
@@ -251,10 +350,24 @@ class TTSCacheManager: ObservableObject {
                     }
                     
                     // Update progress
-                    let progress = Double(successCount + failureCount) / totalCount
+                    let currentProgress = Double(successCount + failureCount) / totalCount
+                    let currentSuccessCount = successCount
+                    let totalPhraseCount = phrases.count
+                    
                     await MainActor.run {
-                        cacheWarmingProgress = progress
-                        print("🗣️💾 TTS Cache: Updated progress to \(String(format: "%.0f%%", progress * 100))")
+                        cacheWarmingProgress = currentProgress
+                        print("🗣️💾 TTS Cache: Updated progress to \(String(format: "%.0f%%", currentProgress * 100))")
+                        
+                        #if DEBUG
+                        // Update progress toast
+                        if let toastId = progressToastId {
+                            ToastManager.shared.updateProgress(
+                                id: toastId, 
+                                progress: currentProgress,
+                                label: "Caching TTS... (\(currentSuccessCount)/\(totalPhraseCount))"
+                            )
+                        }
+                        #endif
                     }
                 }
                 
@@ -269,9 +382,28 @@ class TTSCacheManager: ObservableObject {
                     print("🗣️💾 TTS Cache: ⚠️ Partial cache update, keeping existing cache")
                 }
                 
+                let finalSuccessCount = successCount
+                let totalPhrases = phrases.count
+                
                 await MainActor.run {
                     isCacheWarming = false
                     cacheWarmingProgress = 1.0
+                    
+                    #if DEBUG
+                    // Dismiss progress toast and show result
+                    if let toastId = progressToastId {
+                        ToastManager.shared.dismissProgress(id: toastId)
+                        progressToastId = nil
+                        
+                        if finalSuccessCount == totalPhrases {
+                            ToastManager.shared.show("TTS cache ready!", type: .success)
+                        } else if finalSuccessCount > 0 {
+                            ToastManager.shared.show("TTS cache partially ready (\(finalSuccessCount)/\(totalPhrases))", type: .warning)
+                        } else {
+                            ToastManager.shared.show("TTS cache failed", type: .error)
+                        }
+                    }
+                    #endif
                 }
             }
         }
@@ -381,7 +513,9 @@ class TTSCacheManager: ObservableObject {
     private func loadMetadata() -> TTSCacheMetadata? {
         do {
             let data = try Data(contentsOf: metadataFile)
-            return try JSONDecoder().decode(TTSCacheMetadata.self, from: data)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(TTSCacheMetadata.self, from: data)
         } catch {
             print("🗣️💾 TTS Cache: Failed to load metadata: \(error)")
             return nil

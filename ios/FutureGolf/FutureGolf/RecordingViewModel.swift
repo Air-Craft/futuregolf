@@ -3,6 +3,7 @@ import SwiftUI
 import AVFoundation
 import Combine
 import Speech
+import CoreImage
 
 // MARK: - Recording Phases
 enum RecordingPhase {
@@ -69,6 +70,10 @@ class RecordingViewModel: NSObject, ObservableObject {
     var showProgressCircles = false
     var currentFrameRate: Double = 0.0  // Actual achieved frame rate for display
     var recordedVideoURL: URL?
+    private var isProcessingEnabled = false  // Controls whether to process captured photos
+    private var lastFrameCaptureTime: TimeInterval = 0  // Track last frame capture time
+    private var shouldCaptureNextFrame = false  // Flag to capture next frame
+    private var activeAnalysisTasks = Set<Task<Void, Never>>()  // Track active analysis tasks
     
     // MARK: - Camera Properties  
     var preferredFrameRate: Double { CameraConfiguration.preferredFrameRate }
@@ -94,9 +99,10 @@ class RecordingViewModel: NSObject, ObservableObject {
     // MARK: - Camera Session
     var captureSession: AVCaptureSession?
     private var videoOutput: AVCaptureMovieFileOutput?
-    private var photoOutput: AVCapturePhotoOutput?
+    private var videoDataOutput: AVCaptureVideoDataOutput?
     private var currentCamera: AVCaptureDevice?
     private var videoInput: AVCaptureDeviceInput?
+    private let videoDataOutputQueue = DispatchQueue(label: "com.futuregolf.videodataoutput")
     
     // MARK: - Timers
     private var recordingTimer: Timer?
@@ -119,20 +125,15 @@ class RecordingViewModel: NSObject, ObservableObject {
         // Enhanced error logging for debugging
         print("🐛 RecordingViewModel: Initializing...")
         
-        do {
-            setupProgressCircles()
-            print("🐛 RecordingViewModel: Progress circles setup completed")
-            
-            setupVoiceCommands()
-            print("🐛 RecordingViewModel: Voice commands setup completed")
-            
-            // Start API session
-            let sessionId = recordingAPIService.startSession()
-            print("🐛 RecordingViewModel: API session started with ID: \(sessionId)")
-            
-        } catch {
-            print("🐛 RecordingViewModel: Initialization error: \(error)")
-        }
+        setupProgressCircles()
+        print("🐛 RecordingViewModel: Progress circles setup completed")
+        
+        setupVoiceCommands()
+        print("🐛 RecordingViewModel: Voice commands setup completed")
+        
+        // Start API session
+        let sessionId = recordingAPIService.startSession()
+        print("🐛 RecordingViewModel: API session started with ID: \(sessionId)")
     }
     
     // MARK: - Setup Methods
@@ -215,10 +216,10 @@ class RecordingViewModel: NSObject, ObservableObject {
             setupVideoOutput()
             print("🐛 RecordingViewModel: Video output setup completed")
             
-            // Setup photo output for stills
-            print("🐛 RecordingViewModel: Setting up photo output...")
-            setupPhotoOutput()
-            print("🐛 RecordingViewModel: Photo output setup completed")
+            // Setup video data output for silent frame capture
+            print("🐛 RecordingViewModel: Setting up video data output...")
+            setupVideoDataOutput()
+            print("🐛 RecordingViewModel: Video data output setup completed")
             
         } catch {
             print("🐛 RecordingViewModel: Camera setup error: \(error)")
@@ -436,13 +437,40 @@ class RecordingViewModel: NSObject, ObservableObject {
         }
     }
     
-    private func setupPhotoOutput() {
+    private func setupVideoDataOutput() {
         guard let session = captureSession else { return }
         
-        photoOutput = AVCapturePhotoOutput()
+        videoDataOutput = AVCaptureVideoDataOutput()
         
-        if let output = photoOutput, session.canAddOutput(output) {
-            session.addOutput(output)
+        if let output = videoDataOutput {
+            // Configure pixel format for optimal performance
+            output.videoSettings = [
+                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
+            ]
+            
+            // Discard late frames to avoid blocking
+            output.alwaysDiscardsLateVideoFrames = true
+            
+            // Set delegate for frame processing
+            output.setSampleBufferDelegate(self, queue: videoDataOutputQueue)
+            
+            if session.canAddOutput(output) {
+                session.addOutput(output)
+                
+                // Configure connection
+                if let connection = output.connection(with: .video) {
+                    // Set video orientation for portrait mode  
+                    if #available(iOS 17.0, *) {
+                        if connection.isVideoRotationAngleSupported(90) {
+                            connection.videoRotationAngle = 90 // Portrait mode
+                        }
+                    } else {
+                        if connection.isVideoOrientationSupported {
+                            connection.videoOrientation = .portrait
+                        }
+                    }
+                }
+            }
         }
     }
     
@@ -468,10 +496,13 @@ class RecordingViewModel: NSObject, ObservableObject {
         
         currentPhase = .recording
         isRecording = true
+        isProcessingEnabled = true  // Enable photo processing
         showPositioningIndicator = false
         showProgressCircles = true
         recordingTime = 0
         swingCount = 0
+        stillSequenceNumber = 0  // Reset sequence number
+        lastFrameCaptureTime = 0  // Reset last capture time
         
         // Reset progress circles
         for i in 0..<progressCircles.count {
@@ -495,12 +526,26 @@ class RecordingViewModel: NSObject, ObservableObject {
     func finishRecording() {
         guard currentPhase == .recording else { return }
         
-        currentPhase = .processing
+        print("🏁 Finishing recording - stopping all processing")
+        
         isRecording = false
+        isProcessingEnabled = false  // Disable photo processing immediately
         showProgressCircles = false
         
-        // Stop all timers
+        // Cancel all active analysis tasks
+        print("🏁 Cancelling \(activeAnalysisTasks.count) active analysis tasks")
+        for task in activeAnalysisTasks {
+            task.cancel()
+        }
+        activeAnalysisTasks.removeAll()
+        
+        // Stop all timers first to prevent any more captures
         stopAllTimers()
+        
+        // Stop video data output to prevent any more frames
+        if let dataOutput = videoDataOutput {
+            dataOutput.setSampleBufferDelegate(nil, queue: nil)
+        }
         
         // Stop video recording
         stopVideoRecording()
@@ -508,6 +553,9 @@ class RecordingViewModel: NSObject, ObservableObject {
         // Stop voice recognition
         onDeviceSTT.stopListening()
         stopVoiceRecognition()
+        
+        // Set phase to processing only after video URL is available
+        // This will be done in the delegate callback
         
         // Play completion TTS
         ttsService.speakText("That's great. I'll get to work analyzing your swings.")
@@ -547,6 +595,12 @@ class RecordingViewModel: NSObject, ObservableObject {
     private func startStillCaptureTimer() {
         stillCaptureTimer = Timer.scheduledTimer(withTimeInterval: stillCaptureInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
+                // Double-check we're still in recording phase
+                guard self?.currentPhase == .recording,
+                      self?.isProcessingEnabled == true else {
+                    print("Skipping frame capture - not in recording phase or processing disabled")
+                    return
+                }
                 self?.captureStillForAnalysis()
             }
         }
@@ -597,16 +651,14 @@ class RecordingViewModel: NSObject, ObservableObject {
     // MARK: - Still Capture Methods
     
     func captureStillForAnalysis() {
-        guard let photoOutput = photoOutput, currentPhase == .recording else { return }
-        
-        let photoSettings = AVCapturePhotoSettings()
-        if #available(iOS 16.0, *) {
-            photoSettings.maxPhotoDimensions = CMVideoDimensions(width: 1920, height: 1080)
-        } else {
-            photoSettings.isHighResolutionPhotoEnabled = false
+        guard currentPhase == .recording,
+              isProcessingEnabled else { 
+            print("🛑 Skipping frame capture request - not in recording phase or processing disabled")
+            return 
         }
         
-        photoOutput.capturePhoto(with: photoSettings, delegate: self)
+        // Set flag to capture next video frame
+        shouldCaptureNextFrame = true
     }
     
     // MARK: - Swing Detection Methods
@@ -632,20 +684,52 @@ class RecordingViewModel: NSObject, ObservableObject {
     }
     
     func processStillImage(_ image: UIImage) {
+        // Only process if enabled
+        guard isProcessingEnabled else { 
+            print("🛑 Skipping still image processing - processing disabled")
+            return 
+        }
+        
         // Send to server for swing detection
-        Task {
+        let task = Task { [weak self] in
+            guard let self = self else { return }
+            
             do {
-                let isSwingDetected = try await analyzeStillForSwing(image)
+                // Check again before making network request
+                guard self.isProcessingEnabled else {
+                    print("🛑 Aborting swing analysis - processing disabled")
+                    return
+                }
+                
+                let isSwingDetected = try await self.analyzeStillForSwing(image)
+                
+                // Check one more time before processing result
                 await MainActor.run {
-                    processSwingDetection(isSwingDetected: isSwingDetected)
+                    guard self.isProcessingEnabled else {
+                        print("🛑 Ignoring swing detection result - processing disabled")
+                        return
+                    }
+                    self.processSwingDetection(isSwingDetected: isSwingDetected)
                 }
             } catch {
                 print("Error analyzing still image: \(error)")
-                // Fallback to local mock detection if API fails
+                // Only do fallback if still processing
                 await MainActor.run {
-                    let mockDetection = Bool.random() && recordingTime > 2.0 // Mock detection after 2 seconds
-                    processSwingDetection(isSwingDetected: mockDetection)
+                    guard self.isProcessingEnabled else { return }
+                    let mockDetection = Bool.random() && self.recordingTime > 2.0 // Mock detection after 2 seconds
+                    self.processSwingDetection(isSwingDetected: mockDetection)
                 }
+            }
+        }
+        
+        // Track the task
+        activeAnalysisTasks.insert(task)
+        
+        // Clean up completed task after it finishes
+        Task { [weak self] in
+            await task.value
+            await MainActor.run {
+                _ = self?.activeAnalysisTasks.remove(task)
             }
         }
     }
@@ -653,13 +737,25 @@ class RecordingViewModel: NSObject, ObservableObject {
     private var stillSequenceNumber = 0
     
     private func analyzeStillForSwing(_ image: UIImage) async throws -> Bool {
+        // Check if task is cancelled
+        try Task.checkCancellation()
+        
         stillSequenceNumber += 1
+        
+        // Check if processing is still enabled before making network request
+        guard isProcessingEnabled else {
+            print("🛑 Skipping API call - processing disabled")
+            throw CancellationError()
+        }
         
         // Use API service for swing detection
         let response = try await recordingAPIService.analyzeSwingFromImage(
             image, 
             sequenceNumber: stillSequenceNumber
         )
+        
+        // Check again after network call
+        try Task.checkCancellation()
         
         print("Swing detection: \(response.swingDetected), confidence: \(response.confidence), phase: \(response.swingPhase ?? "none")")
         
@@ -736,31 +832,71 @@ extension RecordingViewModel: AVCaptureFileOutputRecordingDelegate {
             print("Video recording finished successfully: \(outputFileURL)")
             Task { @MainActor in
                 self.recordedVideoURL = outputFileURL
+                // Now that we have the video URL, transition to processing
+                if self.currentPhase != .processing {
+                    self.currentPhase = .processing
+                }
             }
         }
     }
 }
 
-// MARK: - AVCapturePhotoCaptureDelegate
+// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
 
-extension RecordingViewModel: AVCapturePhotoCaptureDelegate {
+extension RecordingViewModel: AVCaptureVideoDataOutputSampleBufferDelegate {
     
-    nonisolated func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        if let error = error {
-            print("Photo capture error: \(error)")
-            return
-        }
-        
-        guard let imageData = photo.fileDataRepresentation(),
-              let image = UIImage(data: imageData) else {
-            print("Failed to create image from photo data")
-            return
-        }
-        
+    nonisolated func captureOutput(_ output: AVCaptureOutput, 
+                                   didOutput sampleBuffer: CMSampleBuffer, 
+                                   from connection: AVCaptureConnection) {
+        // Check if we should capture this frame
         Task { @MainActor in
+            guard self.shouldCaptureNextFrame else { return }
+            
+            guard self.isProcessingEnabled else {
+                print("🎥 Frame capture blocked - processing disabled")
+                self.shouldCaptureNextFrame = false
+                return
+            }
+            
+            guard self.currentPhase == .recording else {
+                print("🎥 Frame capture blocked - not in recording phase (phase: \(self.currentPhase))")
+                self.shouldCaptureNextFrame = false
+                return
+            }
+            
+            // Check if enough time has passed since last capture
+            let currentTime = self.recordingTime
+            let timeSinceLastCapture = currentTime - self.lastFrameCaptureTime
+            
+            guard timeSinceLastCapture >= self.stillCaptureInterval else { return }
+            
+            // Reset flag and update last capture time
+            self.shouldCaptureNextFrame = false
+            self.lastFrameCaptureTime = currentTime
+            
+            print("🎥 Capturing frame for swing analysis at time: \(currentTime)")
+            
+            // Extract image from sample buffer
+            guard let image = self.imageFromSampleBuffer(sampleBuffer) else {
+                print("Failed to extract image from sample buffer")
+                return
+            }
+            
+            // Process the captured frame
             self.onStillCaptured?(image)
             self.processStillImage(image)
         }
+    }
+    
+    private func imageFromSampleBuffer(_ sampleBuffer: CMSampleBuffer) -> UIImage? {
+        guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return nil }
+        
+        let ciImage = CIImage(cvPixelBuffer: imageBuffer)
+        let context = CIContext()
+        
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
+        
+        return UIImage(cgImage: cgImage)
     }
 }
 

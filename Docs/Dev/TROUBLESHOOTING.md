@@ -2,28 +2,63 @@
 
 ## Network Connectivity Issues
 
+### ConnectivityService Monitoring
+
+The app now includes automatic network monitoring with visual feedback in DEBUG mode.
+
+**Features:**
+- Real-time connectivity detection
+- Toast notifications for connection changes
+- Automatic retry when connectivity restored
+- Host reachability checking
+
+**Debug Toast Messages:**
+- "Connected via WiFi" - Network restored
+- "No network connection" - Network lost
+- "Connected via Cellular" - Using mobile data
+
 ### TTS Timeout Problems
 
 **Symptoms:**
 - TTS requests timeout after working previously
 - Console shows "TTS Error" messages
+- Toast shows "No network connection"
 
 **Diagnostic Steps:**
-1. Check server connectivity at app launch (look for 🚀 prefixed logs)
-2. Verify IP address in `Config.swift` matches server
-3. Test with curl from Mac: 
+1. Check ConnectivityService status:
+   ```swift
+   print("Connected: \(ConnectivityService.shared.isConnected)")
+   print("Connection type: \(ConnectivityService.shared.connectionType)")
+   ```
+
+2. Verify server reachability:
+   ```swift
+   let reachable = await ConnectivityService.shared.isHostReachable(Config.serverBaseURL)
+   ```
+
+3. Check server connectivity at app launch (look for 🚀 prefixed logs)
+
+4. Verify IP address in `Config.swift` matches server
+
+5. Test with curl from Mac: 
    ```bash
    curl -X POST http://192.168.40.75:8000/api/v1/tts/coaching \
      -H "Content-Type: application/json" \
      -d '{"text":"Test","voice":"onyx","model":"tts-1-hd","speed":0.9}'
    ```
-4. Check if phone and Mac are on same network
+
+6. Check if phone and Mac are on same network
 
 **Common Causes:**
 - Phone switched to cellular data
 - Mac IP address changed
 - Server not running
 - Firewall blocking connection
+
+**Automatic Recovery:**
+- TTS cache manager automatically retries when connectivity restored
+- Services registered with ConnectivityService get callbacks
+- No manual intervention needed in most cases
 
 ### API Connection Test
 
@@ -33,6 +68,53 @@ The app now tests server connectivity at launch. Check console for:
 🚀 Server URL: http://192.168.40.75:8000
 🚀 Server health check - Status: 200
 🚀 TTS test - Status: 200, Time: X.XXs
+```
+
+## TTS Caching Issues
+
+### Cache Not Populating
+
+**Symptoms:**
+- Recording journey audio has delays
+- Console shows cache miss messages
+- Progress toast stuck at 0%
+
+**Diagnostic Steps:**
+1. Check cache status:
+   ```swift
+   TTSService.shared.cacheManager.debugListCachedFiles()
+   ```
+
+2. Verify network connectivity when app launches
+
+3. Look for cache warming logs:
+   ```
+   🗣️💾 TTS Cache: Starting cache warm-up process...
+   🗣️💾 TTS Cache: Total phrases to cache: 6
+   ```
+
+4. Force cache refresh:
+   ```bash
+   # Launch with force refresh
+   TTS_FORCE_REFRESH=1
+   ```
+
+**Common Causes:**
+- No network on first launch
+- Server unreachable during cache warming
+- File system permissions issues
+
+### Cache Progress Toast Not Showing
+
+**Requirements:**
+- DEBUG_MODE=1 environment variable
+- Toast overlay added to root view
+- Cache warming in progress
+
+**Verify:**
+```swift
+// Should see in FutureGolfApp
+.withToastOverlay()
 ```
 
 ## Voice Command Issues
@@ -87,13 +169,17 @@ Both TTS and STT use `.playAndRecord` category with compatible options. If issue
 ### Environment Variables
 - `DEBUG_LAUNCH_RECORDING=1`: Launch directly to recording screen
 - `API_BASE_URL`: Override default server URL
+- `TTS_FORCE_REFRESH=1`: Force TTS cache refresh on launch
+- `DEBUG_MODE=1`: Enable debug toasts and verbose logging
 
 ### Console Log Prefixes
 - 🚀 : App launch diagnostics
-- 🎵 : TTS service logs
+- 🗣️ : TTS service logs (replaced 🎵)
+- 🗣️💾 : TTS cache operations
 - 🎤 : Voice command logs
 - 🐛 : General debug logs
 - 📸 : Camera-related logs
+- 🌐 : Connectivity status logs
 
 ## Backend Server Issues
 

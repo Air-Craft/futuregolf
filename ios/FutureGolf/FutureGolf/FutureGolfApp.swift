@@ -16,6 +16,9 @@ struct FutureGolfApp: App {
     private let debugLaunchRecording = ProcessInfo.processInfo.environment["DEBUG_LAUNCH_RECORDING"] == "1"
     
     init() {
+        // Initialize connectivity monitoring
+        _ = ConnectivityService.shared
+        
         // Test server connectivity at launch
         testServerConnection()
         
@@ -30,9 +33,11 @@ struct FutureGolfApp: App {
                 NavigationView {
                     DebugRecordingLauncher()
                 }
+                .withToastOverlay()
             } else {
                 // Normal app flow
                 HomeView()
+                    .withToastOverlay()
             }
         }
     }
@@ -94,7 +99,11 @@ struct FutureGolfApp: App {
     private func warmTTSCache() {
         print("🚀 APP LAUNCH: Starting TTS cache warming...")
         
-        Task {
+        Task { @MainActor in
+            // Check connectivity status
+            let isConnected = ConnectivityService.shared.isConnected
+            print("🚀 APP LAUNCH: Network connected: \(isConnected)")
+            
             let cacheManager = TTSService.shared.cacheManager
             
             // Check current cache status
@@ -107,8 +116,9 @@ struct FutureGolfApp: App {
                 print("🚀   - Last refresh: \(String(format: "%.1f", age/3600)) hours ago")
             }
             print("🚀   - Force refresh: \(Config.ttsForceCacheRefreshOnLaunch)")
+            print("🚀   - Should refresh: \(cacheManager.shouldRefreshCache())")
             
-            // Start warming (runs on background thread)
+            // Start warming (will check connectivity internally)
             cacheManager.warmCache()
         }
     }

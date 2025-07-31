@@ -6,7 +6,7 @@ struct Config {
     /// The base URL for the backend API server
     static let serverBaseURL: String = {
         // Check for environment variable first, then fallback to default
-        return ProcessInfo.processInfo.environment["API_BASE_URL"] ?? "http://192.168.40.75:8000"
+        return ProcessInfo.processInfo.environment["API_BASE_URL"] ?? "http://brians-macbook-pro-2.local:8000"
     }()
     
     /// API version endpoint
@@ -37,9 +37,7 @@ struct Config {
     static let ttsCacheRefreshInterval: TimeInterval = 86400.0
     
     /// Force TTS cache refresh on app launch (for debugging/testing)
-    static let ttsForceCacheRefreshOnLaunch: Bool = {
-        return ProcessInfo.processInfo.environment["TTS_FORCE_REFRESH"] == "1"
-    }()
+    static let ttsForceCacheRefreshOnLaunch: Bool = false
     
     /// Directory name for TTS cache
     static let ttsCacheDirectory = "TTSCache"
