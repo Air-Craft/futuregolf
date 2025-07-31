@@ -4,7 +4,29 @@ AI-powered golf swing analyzer with real-time coaching feedback.
 
 ## Quick Start
 
-### 🚀 One-Command Startup
+### Multi-Clone Setup
+
+#### Setup the container folder
+
+mkdir golfswinganalyzerai
+cd golfswinganalyzerai 
+mkdir dev; mkdir -p setup/backend
+# copy .env and gcs-credentials.json into setup/backend (and anything else as setup requires)
+
+#### Creating a new development channel (e.g. for claude code instance)
+# Make sure you have pyenv installed and python 3.10
+
+cd dev
+git clone git@github.com:Air-Craft/futuregolf.git your-dev-channel-name
+cd your-dev-channel-name 
+pyenv local 3.10   # optional. for devops not through pdm
+cp -pv ../setup/backend\.* ../setup/backend/* backend/
+make setup
+make backend 
+open ios/FutureGolf/FutureGolf.xcodeproj
+
+
+ 🚀 One-Command Startup
 
 ```bash
 # Option 1: Shell script (recommended)
