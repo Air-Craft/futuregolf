@@ -12,6 +12,8 @@ When lacking context about what to do next or how to implement features, ALWAYS 
    - **Frontend work**: Check `Spec/Frontend/` for user journey, video recording/playback, TTS, navigation
    - **Business logic**: Check `Spec/Business/` for subscription model and monetization
    - **Testing**: Check `Spec/Testing/` for testing strategy and scenarios
+3. Always follow the development guidelines in `Docs/Spec/DEVELOPMENT_GUIDELINES.md`. If guidance is not explicit in this document, follow industry best practices, researching those online if need be first. 
+
 
 These specifications contain the authoritative requirements and implementation details organized by functional domain.
 
