@@ -8,6 +8,7 @@ AI-powered golf swing analyzer with real-time coaching feedback.
 
 #### Setup the container folder
 
+```
 mkdir golfswinganalyzerai
 cd golfswinganalyzerai 
 mkdir dev; mkdir -p setup/backend
@@ -24,6 +25,22 @@ cp -pv ../setup/backend\.* ../setup/backend/* backend/
 make setup
 make backend 
 open ios/FutureGolf/FutureGolf.xcodeproj
+```
+
+### Running the backend in the background
+
+```
+tmux new -s backend
+# (in new terminal)
+make backend
+# ctrl-b, d
+...
+# to reattach later
+tmux attach -t backend
+
+
+
+
 
 
  🚀 One-Command Startup
