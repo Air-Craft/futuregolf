@@ -18,6 +18,9 @@ struct FutureGolfApp: App {
     init() {
         // Test server connectivity at launch
         testServerConnection()
+        
+        // Start TTS cache warming in background
+        warmTTSCache()
     }
     
     var body: some Scene {
@@ -42,7 +45,9 @@ struct FutureGolfApp: App {
             do {
                 // Test basic connectivity
                 let url = URL(string: "\(Config.serverBaseURL)/health")!
-                let (data, response) = try await URLSession.shared.data(from: url)
+                var healthRequest = URLRequest(url: url)
+                healthRequest.timeoutInterval = Config.healthCheckTimeout
+                let (data, response) = try await URLSession.shared.data(for: healthRequest)
                 
                 if let httpResponse = response as? HTTPURLResponse {
                     print("🚀 Server health check - Status: \(httpResponse.statusCode)")
@@ -56,6 +61,7 @@ struct FutureGolfApp: App {
                 var ttsRequest = URLRequest(url: ttsURL)
                 ttsRequest.httpMethod = "POST"
                 ttsRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                ttsRequest.timeoutInterval = Config.ttsSynthesisTimeout
                 
                 let testBody = [
                     "text": "Test",
@@ -82,6 +88,28 @@ struct FutureGolfApp: App {
                     print("🚀 URLError description: \(urlError.localizedDescription)")
                 }
             }
+        }
+    }
+    
+    private func warmTTSCache() {
+        print("🚀 APP LAUNCH: Starting TTS cache warming...")
+        
+        Task {
+            let cacheManager = TTSService.shared.cacheManager
+            
+            // Check current cache status
+            let status = cacheManager.getCacheStatus()
+            print("🚀 TTS Cache Status:")
+            print("🚀   - Exists: \(status.exists)")
+            print("🚀   - Phrase count: \(status.phraseCount)")
+            if let lastRefresh = status.lastRefresh {
+                let age = Date().timeIntervalSince(lastRefresh)
+                print("🚀   - Last refresh: \(String(format: "%.1f", age/3600)) hours ago")
+            }
+            print("🚀   - Force refresh: \(Config.ttsForceCacheRefreshOnLaunch)")
+            
+            // Start warming (runs on background thread)
+            cacheManager.warmCache()
         }
     }
 }

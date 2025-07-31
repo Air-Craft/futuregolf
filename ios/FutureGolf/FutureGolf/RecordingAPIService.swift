@@ -60,8 +60,8 @@ class RecordingAPIService: ObservableObject {
         
         // Configure URL session
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 60
+        config.timeoutIntervalForRequest = Config.apiRequestTimeout
+        config.timeoutIntervalForResource = Config.videoUploadTimeout
         self.session = URLSession(configuration: config)
     }
     
@@ -114,6 +114,7 @@ class RecordingAPIService: ObservableObject {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.httpBody = try JSONEncoder().encode(request)
+        urlRequest.timeoutInterval = Config.apiRequestTimeout
         
         let (data, response) = try await session.data(for: urlRequest)
         
@@ -141,6 +142,7 @@ class RecordingAPIService: ObservableObject {
         
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "GET"
+        urlRequest.timeoutInterval = Config.apiRequestTimeout
         
         let (data, response) = try await session.data(for: urlRequest)
         
@@ -162,6 +164,7 @@ class RecordingAPIService: ObservableObject {
         
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
+        urlRequest.timeoutInterval = Config.apiRequestTimeout
         
         let (data, _) = try await session.data(for: urlRequest)
         print("Session reset response: \(String(data: data, encoding: .utf8) ?? "none")")
@@ -173,7 +176,9 @@ class RecordingAPIService: ObservableObject {
         do {
             // Use general health endpoint since voice-specific health check is no longer needed
             let url = URL(string: "\(baseURL.replacingOccurrences(of: "/api/v1", with: ""))/health")!
-            let (_, response) = try await session.data(from: url)
+            var healthRequest = URLRequest(url: url)
+            healthRequest.timeoutInterval = Config.healthCheckTimeout
+            let (_, response) = try await session.data(for: healthRequest)
             
             if let httpResponse = response as? HTTPURLResponse {
                 return httpResponse.statusCode == 200

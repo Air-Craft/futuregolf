@@ -31,6 +31,33 @@ struct Config {
     /// Target number of swings to record
     static let targetSwingCount = 3
     
+    // MARK: - TTS Cache Configuration
+    
+    /// How often to refresh the TTS cache (24 hours by default)
+    static let ttsCacheRefreshInterval: TimeInterval = 86400.0
+    
+    /// Force TTS cache refresh on app launch (for debugging/testing)
+    static let ttsForceCacheRefreshOnLaunch: Bool = {
+        return ProcessInfo.processInfo.environment["TTS_FORCE_REFRESH"] == "1"
+    }()
+    
+    /// Directory name for TTS cache
+    static let ttsCacheDirectory = "TTSCache"
+    
+    // MARK: - Network Timeout Configuration
+    
+    /// Timeout for TTS synthesis requests (in seconds)
+    static let ttsSynthesisTimeout: TimeInterval = 20.0
+    
+    /// Timeout for health check requests (in seconds)
+    static let healthCheckTimeout: TimeInterval = 5.0
+    
+    /// Timeout for general API requests (in seconds)
+    static let apiRequestTimeout: TimeInterval = 30.0
+    
+    /// Timeout for video upload requests (in seconds)
+    static let videoUploadTimeout: TimeInterval = 120.0
+    
     // MARK: - Debug Configuration
     
     /// Enable debug logging

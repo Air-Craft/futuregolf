@@ -13,6 +13,9 @@ class TTSService: NSObject, ObservableObject {
     @Published var isPlaying = false
     @Published var isLoading = false
     
+    // TTS Cache Manager
+    let cacheManager = TTSCacheManager()
+    
     // Fallback iOS TTS
     private let speechSynthesizer = AVSpeechSynthesizer()
     private var currentSpeechCompletion: ((Bool) -> Void)?
@@ -80,11 +83,47 @@ class TTSService: NSObject, ObservableObject {
         
         Task {
             do {
-                let synthesisStart = Date()
-                print("🗣️ TTS: [\(synthesisStart.timeIntervalSince1970)] Calling synthesizeSpeech...")
-                let audioData = try await synthesizeSpeech(text: text)
-                let synthesisTime = Date().timeIntervalSince(synthesisStart)
-                print("🗣️ TTS: Successfully synthesized \(audioData.count) bytes in \(String(format: "%.2f", synthesisTime))s")
+                let audioData: Data
+                
+                // Try to get cached audio first
+                if let cachedData = await cacheManager.getCachedAudio(for: text) {
+                    print("🗣️💾 TTS: Using cached audio for: '\(text.prefix(30))...'")
+                    audioData = cachedData
+                    
+                    // Skip loading state since we have instant access
+                    await MainActor.run {
+                        self.isLoading = false
+                    }
+                } else {
+                    // Debug: Check cache status when cache miss occurs
+                    if TTSPhrases.isCacheable(text: text) {
+                        print("🗣️💾 TTS: Cache miss for cacheable phrase!")
+                        await MainActor.run {
+                            self.cacheManager.debugListCachedFiles()
+                        }
+                    }
+                    // Check if this is a cacheable phrase but user is going too fast
+                    let isCacheWarming = await MainActor.run { self.cacheManager.isCacheWarming }
+                    if TTSPhrases.isCacheable(text: text) && isCacheWarming {
+                        print("🗣️💾 TTS: ⚠️ Cache still warming for cacheable phrase, skipping playback to avoid delay")
+                        completion(false)
+                        self.isProcessingQueue = false
+                        self.processNextInQueue()
+                        return
+                    }
+                    
+                    // Synthesize from server
+                    let synthesisStart = Date()
+                    print("🗣️ TTS: [\(synthesisStart.timeIntervalSince1970)] No cache found, synthesizing: '\(text.prefix(30))...'")
+                    audioData = try await synthesizeSpeech(text: text)
+                    let synthesisTime = Date().timeIntervalSince(synthesisStart)
+                    print("🗣️ TTS: Successfully synthesized \(audioData.count) bytes in \(String(format: "%.2f", synthesisTime))s")
+                    
+                    // Save to cache if it's a cacheable phrase
+                    await MainActor.run {
+                        self.cacheManager.saveToCacheIfCacheable(text: text, data: audioData)
+                    }
+                }
                 
                 await MainActor.run {
                     let playbackStart = Date()
@@ -287,34 +326,7 @@ extension TTSService: AVSpeechSynthesizerDelegate {
     }
 }
 
-// MARK: - Data Models
-
-struct TTSRequest: Codable {
-    let text: String
-    let voice: String
-    let model: String
-    let speed: Double
-}
-
-enum TTSError: LocalizedError {
-    case invalidURL
-    case invalidResponse
-    case serverError(Int)
-    case networkError
-    
-    var errorDescription: String? {
-        switch self {
-        case .invalidURL:
-            return "Invalid TTS server URL"
-        case .invalidResponse:
-            return "Invalid server response"
-        case .serverError(let code):
-            return "Server error: \(code)"
-        case .networkError:
-            return "Network error"
-        }
-    }
-}
+// MARK: - Data Models (shared with TTSCacheManager)
 
 // MARK: - Audio Player Delegate
 

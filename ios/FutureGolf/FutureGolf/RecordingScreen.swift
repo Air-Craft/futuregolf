@@ -212,6 +212,98 @@ struct RecordingScreen: View {
             }
             .accessibilityIdentifier("Left-Handed Mode")
             .accessibilityLabel("Toggle left-handed mode for positioning indicator")
+            
+            #if DEBUG
+            // Debug buttons for testing cache
+            VStack(spacing: 10) {
+                Button("Debug: Force Cache Warm") {
+                    print("🐛 DEBUG: Forcing cache warm...")
+                    TTSService.shared.cacheManager.warmCache()
+                }
+                .font(.caption)
+                .foregroundColor(.orange)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
+                
+                Button("Debug: List Cache") {
+                    print("🐛 DEBUG: Listing cache contents...")
+                    TTSService.shared.cacheManager.debugListCachedFiles()
+                }
+                .font(.caption)
+                .foregroundColor(.orange)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
+                
+                Button("Debug: Test TTS Server") {
+                    print("🐛 DEBUG: Testing TTS server...")
+                    Task {
+                        // First test basic connectivity
+                        print("🐛 DEBUG: Server URL: \(Config.serverBaseURL)")
+                        
+                        do {
+                            // Test health endpoint first
+                            let healthURL = URL(string: "\(Config.serverBaseURL)/health")!
+                            print("🐛 DEBUG: Testing health endpoint: \(healthURL)")
+                            
+                            var healthRequest = URLRequest(url: healthURL)
+                            healthRequest.timeoutInterval = Config.healthCheckTimeout
+                            
+                            let (healthData, healthResponse) = try await URLSession.shared.data(for: healthRequest)
+                            
+                            if let httpResponse = healthResponse as? HTTPURLResponse {
+                                print("🐛 DEBUG: Health check - Status: \(httpResponse.statusCode)")
+                                if let responseString = String(data: healthData, encoding: .utf8) {
+                                    print("🐛 DEBUG: Health response: \(responseString)")
+                                }
+                            }
+                            
+                            // Then test TTS endpoint
+                            let testPhrase = "Test connection"
+                            let urlString = "\(Config.serverBaseURL)/api/v1/tts/coaching"
+                            print("🐛 DEBUG: Testing TTS URL: \(urlString)")
+                            
+                            guard let url = URL(string: urlString) else {
+                                print("🐛 DEBUG: Invalid URL")
+                                return
+                            }
+                            
+                            let requestBody = ["text": testPhrase, "voice": "onyx", "model": "tts-1-hd", "speed": 0.9]
+                            var request = URLRequest(url: url)
+                            request.httpMethod = "POST"
+                            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+                            request.timeoutInterval = Config.ttsSynthesisTimeout
+                            
+                            let (data, response) = try await URLSession.shared.data(for: request)
+                            
+                            if let httpResponse = response as? HTTPURLResponse {
+                                print("🐛 DEBUG: TTS Server Response: \(httpResponse.statusCode)")
+                                print("🐛 DEBUG: Data size: \(data.count) bytes")
+                                print("🐛 DEBUG: ✅ Server is working!")
+                            }
+                        } catch let error as URLError {
+                            print("🐛 DEBUG: Network Error Code: \(error.code.rawValue)")
+                            print("🐛 DEBUG: Network Error: \(error.localizedDescription)")
+                            print("🐛 DEBUG: ❌ Cannot reach server at \(Config.serverBaseURL)")
+                            print("🐛 DEBUG: Check that:")
+                            print("🐛 DEBUG:   1. Backend server is running")
+                            print("🐛 DEBUG:   2. IP address \(Config.serverBaseURL) is correct")
+                            print("🐛 DEBUG:   3. Device is on same network as server")
+                        } catch {
+                            print("🐛 DEBUG: Unexpected Error: \(error)")
+                        }
+                    }
+                }
+                .font(.caption)
+                .foregroundColor(.orange)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
+            }
+            .padding(.top, 20)
+            #endif
         }
     }
     
