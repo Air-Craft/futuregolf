@@ -1,0 +1,51 @@
+[project]
+name = "ai-golf-swing-analyzer"
+version = "1.0.0"
+description = "Default template for PDM package"
+authors = [
+    {name = "Quinn Frederick", email = "xxi@quinnmagick.com"},
+]
+dependencies = [
+    "aiofiles==24.1.0",
+    "asyncpg==0.29.0",
+    "email-validator==2.2.0",
+    "fastapi==0.116.1",
+    "httpx==0.28.1",
+    "python-jose[cryptography]==3.5.0",
+    "mediapipe==0.10.21",
+    "numpy==1.23.5",
+    "openai==1.97.1",
+    "passlib==1.7.4",
+    "protobuf<5,>=4.25.3",
+    "psycopg2-binary==2.9.9",
+    "pydantic==2.11.7",
+    "pytest==8.4.1",
+    "pytest-asyncio==1.1.0",
+    "python-dotenv==1.1.1",
+    "SQLAlchemy==2.0.41",
+    "uvicorn==0.35.0",
+    "google-genai==1.27.0",
+    "google-cloud-storage==2.10.0",
+    "python-multipart>=0.0.20",
+    "google-cloud-storage==2.20.0",
+    "google-resumable-media==2.7.2",
+    "google-auth==2.35.0",
+    "google-cloud-core==2.4.1",
+    "opencv-python==4.10.0.84",
+    "Pillow==11.0.0",
+]
+requires-python = "==3.10.*"
+readme = "README.md"
+license = {text = "All rights reserved. Copyright 2025."}
+
+
+[tool.pdm]
+distribution = false
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+
+[dependency-groups]
+test = ["pytest==7.4.3", "pytest-asyncio==0.21.1", "pytest-cov==4.1.0", "pytest-mock==3.12.0", "pytest-xdist==3.5.0", "pytest-html==4.1.1", "pytest-timeout==2.2.0", "httpx==0.27.0", "requests==2.31.0", "pytest-postgresql==5.0.0", "alembic==1.13.1", "factory-boy==3.3.0", "freezegun==1.2.2", "responses==0.24.1", "locust==2.20.0", "faker==22.0.0", "parameterized==0.9.0", "coverage==7.4.1", "coverage-badge==1.1.0", "locust==2.20.0", "bandit==1.7.5", "safety==2.3.5", "tavern==2.5.0"]

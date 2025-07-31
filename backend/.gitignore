@@ -8,6 +8,14 @@ __pycache__/
 # C extensions
 *.so
 
+
+# Python venv and package management
+venv
+.venv
+.pdm-python
+
+
+
 # Distribution / packaging
 .Python
 build/
