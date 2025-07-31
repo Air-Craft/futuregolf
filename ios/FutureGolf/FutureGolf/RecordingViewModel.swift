@@ -68,6 +68,7 @@ class RecordingViewModel: NSObject, ObservableObject {
     var showPositioningIndicator = true
     var showProgressCircles = false
     var currentFrameRate: Double = 0.0  // Actual achieved frame rate for display
+    var recordedVideoURL: URL?
     
     // MARK: - Camera Properties  
     var preferredFrameRate: Double { CameraConfiguration.preferredFrameRate }
@@ -733,7 +734,9 @@ extension RecordingViewModel: AVCaptureFileOutputRecordingDelegate {
             print("Video recording finished with error: \(error)")
         } else {
             print("Video recording finished successfully: \(outputFileURL)")
-            // Here you would typically save the video or pass it to the analysis pipeline
+            Task { @MainActor in
+                self.recordedVideoURL = outputFileURL
+            }
         }
     }
 }

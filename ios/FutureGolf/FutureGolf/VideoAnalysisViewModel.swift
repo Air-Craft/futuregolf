@@ -94,8 +94,13 @@ class VideoAnalysisViewModel {
             }
             
             // Check video format
-            let asset = AVAsset(url: videoURL)
-            guard asset.isPlayable else {
+            let asset = AVURLAsset(url: videoURL)
+            do {
+                let isPlayable = try await asset.load(.isPlayable)
+                guard isPlayable else {
+                    throw UploadError.invalidVideo
+                }
+            } catch {
                 throw UploadError.invalidVideo
             }
             

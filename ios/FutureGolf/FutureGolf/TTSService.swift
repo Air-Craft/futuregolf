@@ -27,70 +27,70 @@ class TTSService: NSObject, ObservableObject {
             // Use playAndRecord to be compatible with STT that might be running
             try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: [.duckOthers, .defaultToSpeaker])
             try AVAudioSession.sharedInstance().setActive(true, options: [])
-            print("🎵 TTS: Audio session configured successfully")
-            print("🎵 TTS: Audio session category: \(AVAudioSession.sharedInstance().category)")
-            print("🎵 TTS: Audio session mode: \(AVAudioSession.sharedInstance().mode)")
-            print("🎵 TTS: Audio session options: \(AVAudioSession.sharedInstance().categoryOptions)")
+            print("🗣️ TTS: Audio session configured successfully")
+            print("🗣️ TTS: Audio session category: \(AVAudioSession.sharedInstance().category)")
+            print("🗣️ TTS: Audio session mode: \(AVAudioSession.sharedInstance().mode)")
+            print("🗣️ TTS: Audio session options: \(AVAudioSession.sharedInstance().categoryOptions)")
         } catch {
-            print("🎵 TTS: Failed to configure audio session: \(error)")
+            print("🗣️ TTS: Failed to configure audio session: \(error)")
         }
     }
     
     func speakText(_ text: String, completion: @escaping (Bool) -> Void = { _ in }) {
         guard !text.isEmpty else {
-            print("🎵 TTS: Empty text provided, skipping")
+            print("🗣️ TTS: Empty text provided, skipping")
             completion(false)
             return
         }
         
         let startTime = Date()
-        print("🎵 TTS: [\(startTime.timeIntervalSince1970)] Received request to speak: '\(text)'")
+        print("🗣️ TTS: [\(startTime.timeIntervalSince1970)] Received request to speak: '\(text)'")
         
         // Add to queue and process
         speechQueue.append((text, { success in
             let totalTime = Date().timeIntervalSince(startTime)
-            print("🎵 TTS: Total time from request to completion: \(String(format: "%.2f", totalTime))s")
+            print("🗣️ TTS: Total time from request to completion: \(String(format: "%.2f", totalTime))s")
             completion(success)
         }))
-        print("🎵 TTS: Added to queue. Queue size: \(speechQueue.count)")
+        print("🗣️ TTS: Added to queue. Queue size: \(speechQueue.count)")
         processNextInQueue()
     }
     
     private func processNextInQueue() {
         guard !isProcessingQueue && !speechQueue.isEmpty else { 
             if isProcessingQueue {
-                print("🎵 TTS: Already processing queue")
+                print("🗣️ TTS: Already processing queue")
             } else if speechQueue.isEmpty {
-                print("🎵 TTS: Queue is empty")
+                print("🗣️ TTS: Queue is empty")
             }
             return 
         }
         
-        print("🎵 TTS: Starting to process next item in queue")
+        print("🗣️ TTS: Starting to process next item in queue")
         isProcessingQueue = true
         let (text, completion) = speechQueue.removeFirst()
         
-        print("🎵 TTS: Processing text: '\(text)'")
+        print("🗣️ TTS: Processing text: '\(text)'")
         
         // Stop any current playback
         stopCurrentPlayback()
         
         isLoading = true
-        print("🎵 TTS: Set loading state to true, starting synthesis...")
+        print("🗣️ TTS: Set loading state to true, starting synthesis...")
         
         Task {
             do {
                 let synthesisStart = Date()
-                print("🎵 TTS: [\(synthesisStart.timeIntervalSince1970)] Calling synthesizeSpeech...")
+                print("🗣️ TTS: [\(synthesisStart.timeIntervalSince1970)] Calling synthesizeSpeech...")
                 let audioData = try await synthesizeSpeech(text: text)
                 let synthesisTime = Date().timeIntervalSince(synthesisStart)
-                print("🎵 TTS: Successfully synthesized \(audioData.count) bytes in \(String(format: "%.2f", synthesisTime))s")
+                print("🗣️ TTS: Successfully synthesized \(audioData.count) bytes in \(String(format: "%.2f", synthesisTime))s")
                 
                 await MainActor.run {
                     let playbackStart = Date()
                     self.playAudio(data: audioData) { [weak self] success in
                         let playbackTime = Date().timeIntervalSince(playbackStart)
-                        print("🎵 TTS: Playback completed in \(String(format: "%.2f", playbackTime))s with success: \(success)")
+                        print("🗣️ TTS: Playback completed in \(String(format: "%.2f", playbackTime))s with success: \(success)")
                         completion(success)
                         self?.isProcessingQueue = false
                         self?.processNextInQueue()
@@ -110,10 +110,10 @@ class TTSService: NSObject, ObservableObject {
     
     private func synthesizeSpeech(text: String) async throws -> Data {
         let urlString = "\(serverURL)/api/v1/tts/coaching"
-        print("🎵 TTS: Attempting to synthesize speech at URL: \(urlString)")
+        print("🗣️ TTS: Attempting to synthesize speech at URL: \(urlString)")
         
         guard let url = URL(string: urlString) else {
-            print("🎵 TTS: Invalid URL: \(urlString)")
+            print("🗣️ TTS: Invalid URL: \(urlString)")
             throw TTSError.invalidURL
         }
         
@@ -124,7 +124,7 @@ class TTSService: NSObject, ObservableObject {
             speed: 0.9
         )
         
-        print("🎵 TTS: Request body: \(requestBody)")
+        print("🗣️ TTS: Request body: \(requestBody)")
         
         // Use default URLSession configuration
         let session = URLSession.shared
@@ -135,35 +135,35 @@ class TTSService: NSObject, ObservableObject {
         request.httpBody = try JSONEncoder().encode(requestBody)
         
         let networkStart = Date()
-        print("🎵 TTS: [\(networkStart.timeIntervalSince1970)] Sending POST request to \(url)")
+        print("🗣️ TTS: [\(networkStart.timeIntervalSince1970)] Sending POST request to \(url)")
         
         let (data, response) = try await session.data(for: request)
         let networkTime = Date().timeIntervalSince(networkStart)
         
-        print("🎵 TTS: Received response with \(data.count) bytes in \(String(format: "%.2f", networkTime))s")
+        print("🗣️ TTS: Received response with \(data.count) bytes in \(String(format: "%.2f", networkTime))s")
         
         guard let httpResponse = response as? HTTPURLResponse else {
-            print("🎵 TTS: Invalid response type")
+            print("🗣️ TTS: Invalid response type")
             throw TTSError.invalidResponse
         }
         
-        print("🎵 TTS: HTTP Status Code: \(httpResponse.statusCode)")
+        print("🗣️ TTS: HTTP Status Code: \(httpResponse.statusCode)")
         
         guard httpResponse.statusCode == 200 else {
-            print("🎵 TTS: Server error with status code: \(httpResponse.statusCode)")
+            print("🗣️ TTS: Server error with status code: \(httpResponse.statusCode)")
             if let errorString = String(data: data, encoding: .utf8) {
-                print("🎵 TTS: Error response body: \(errorString)")
+                print("🗣️ TTS: Error response body: \(errorString)")
             }
             throw TTSError.serverError(httpResponse.statusCode)
         }
         
-        print("🎵 TTS: Successfully received audio data")
+        print("🗣️ TTS: Successfully received audio data")
         return data
     }
     
     private func playAudio(data: Data, completion: @escaping (Bool) -> Void) {
         do {
-            print("🎵 TTS: Creating AVAudioPlayer with \(data.count) bytes of audio data")
+            print("🗣️ TTS: Creating AVAudioPlayer with \(data.count) bytes of audio data")
             
             // Reconfigure audio session for playback
             try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: [.duckOthers, .defaultToSpeaker])
@@ -173,14 +173,14 @@ class TTSService: NSObject, ObservableObject {
             audioPlayer?.volume = 1.0  // Maximum volume
             audioPlayer?.prepareToPlay()
             
-            print("🎵 TTS: Audio player created. Format: \(audioPlayer?.format.debugDescription ?? "unknown")")
-            print("🎵 TTS: Audio player duration: \(audioPlayer?.duration ?? 0) seconds")
-            print("🎵 TTS: Audio player volume: \(audioPlayer?.volume ?? 0)")
-            print("🎵 TTS: Device volume: \(AVAudioSession.sharedInstance().outputVolume)")
+            print("🗣️ TTS: Audio player created. Format: \(audioPlayer?.format.debugDescription ?? "unknown")")
+            print("🗣️ TTS: Audio player duration: \(audioPlayer?.duration ?? 0) seconds")
+            print("🗣️ TTS: Audio player volume: \(audioPlayer?.volume ?? 0)")
+            print("🗣️ TTS: Device volume: \(AVAudioSession.sharedInstance().outputVolume)")
             
             audioPlayerDelegate = AudioPlayerDelegate { [weak self] success in
                 DispatchQueue.main.async {
-                    print("🎵 TTS: Audio playback finished with success: \(success)")
+                    print("🗣️ TTS: Audio playback finished with success: \(success)")
                     self?.isPlaying = false
                     self?.isLoading = false
                     self?.audioPlayerDelegate = nil
@@ -192,19 +192,19 @@ class TTSService: NSObject, ObservableObject {
             isLoading = false
             isPlaying = true
             
-            print("🎵 TTS: Starting audio playback...")
+            print("🗣️ TTS: Starting audio playback...")
             let didStart = audioPlayer?.play() ?? false
-            print("🎵 TTS: Audio player play() returned: \(didStart)")
+            print("🗣️ TTS: Audio player play() returned: \(didStart)")
             
             if !didStart {
-                print("🎵 TTS: Failed to start playback, checking audio player state")
-                print("🎵 TTS: Audio player isPlaying: \(audioPlayer?.isPlaying ?? false)")
-                print("🎵 TTS: Audio session category: \(AVAudioSession.sharedInstance().category)")
-                print("🎵 TTS: Audio session isOtherAudioPlaying: \(AVAudioSession.sharedInstance().isOtherAudioPlaying)")
+                print("🗣️ TTS: Failed to start playback, checking audio player state")
+                print("🗣️ TTS: Audio player isPlaying: \(audioPlayer?.isPlaying ?? false)")
+                print("🗣️ TTS: Audio session category: \(AVAudioSession.sharedInstance().category)")
+                print("🗣️ TTS: Audio session isOtherAudioPlaying: \(AVAudioSession.sharedInstance().isOtherAudioPlaying)")
             }
             
         } catch {
-            print("🎵 TTS: Failed to play audio: \(error)")
+            print("🗣️ TTS: Failed to play audio: \(error)")
             isLoading = false
             completion(false)
         }
@@ -246,7 +246,7 @@ class TTSService: NSObject, ObservableObject {
     // MARK: - Fallback System TTS
     
     private func fallbackToSystemTTS(text: String, completion: @escaping (Bool) -> Void) {
-        print("🎵 TTS: Using iOS system TTS as fallback")
+        print("🗣️ TTS: Using iOS system TTS as fallback")
         
         // Stop any existing speech
         if speechSynthesizer.isSpeaking {
@@ -273,14 +273,14 @@ class TTSService: NSObject, ObservableObject {
 
 extension TTSService: AVSpeechSynthesizerDelegate {
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        print("🎵 TTS: System TTS finished speaking")
+        print("🗣️ TTS: System TTS finished speaking")
         isPlaying = false
         currentSpeechCompletion?(true)
         currentSpeechCompletion = nil
     }
     
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        print("🎵 TTS: System TTS was cancelled")
+        print("🗣️ TTS: System TTS was cancelled")
         isPlaying = false
         currentSpeechCompletion?(false)
         currentSpeechCompletion = nil

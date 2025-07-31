@@ -6,6 +6,8 @@ struct RecordingScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showCancelConfirmation = false
     @State private var cameraPreview: AVCaptureVideoPreviewLayer?
+    @State private var showSwingAnalysis = false
+    @State private var recordedVideoURL: URL?
     
     var body: some View {
         ZStack {
@@ -53,6 +55,24 @@ struct RecordingScreen: View {
         }
         .onDisappear {
             viewModel.cleanup()
+        }
+        .onChange(of: viewModel.currentPhase) { oldValue, newValue in
+            if newValue == .processing {
+                // Start a delay before showing SwingAnalysisView
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    if let videoURL = viewModel.recordedVideoURL {
+                        recordedVideoURL = videoURL
+                        showSwingAnalysis = true
+                    }
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showSwingAnalysis) {
+            if let videoURL = recordedVideoURL {
+                NavigationStack {
+                    SwingAnalysisView(videoURL: videoURL, analysisId: nil)
+                }
+            }
         }
         .confirmationDialog("Cancel Recording", isPresented: $showCancelConfirmation) {
             Button("Cancel Recording", role: .destructive) {
