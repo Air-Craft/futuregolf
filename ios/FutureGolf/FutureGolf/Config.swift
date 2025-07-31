@@ -6,7 +6,8 @@ struct Config {
     /// The base URL for the backend API server
     static let serverBaseURL: String = {
         // Check for environment variable first, then fallback to default
-        return ProcessInfo.processInfo.environment["API_BASE_URL"] ?? "http://brians-macbook-pro-2.local:8000"
+//        return ProcessInfo.processInfo.environment["API_BASE_URL"] ?? "http://brians-macbook-pro-2.local:8000"
+        return "http://brians-macbook-pro-2.local:8000"
     }()
     
     /// API version endpoint

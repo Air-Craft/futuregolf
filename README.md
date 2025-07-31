@@ -21,9 +21,10 @@ cd dev
 git clone git@github.com:Air-Craft/futuregolf.git your-dev-channel-name
 cd your-dev-channel-name 
 pyenv local 3.10   # optional. for devops not through pdm
-cp -pv ../setup/backend\.* ../setup/backend/* backend/
+cp -pv ../../setup/backend\.* ../../setup/backend/* backend/
 make setup
-make backend 
+make apibase
+make backend [apibase] [800x] # port different for each dev instance
 open ios/FutureGolf/FutureGolf.xcodeproj
 ```
 

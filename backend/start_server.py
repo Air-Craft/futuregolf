@@ -9,6 +9,7 @@ if __name__ == "__main__":
     # Load environment variables
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", 8000))
+    print(f"🔧 Server running on: {host}:{port}")
     
     # Run the server
     uvicorn.run(
