@@ -14,18 +14,13 @@ The AI Swing Detection service uses WebSocket communication to process a stream 
 
 #### 1. Frame Extraction
 
-Before running tests, frames must be extracted from the test video:
+Frame extraction is now handled automatically by the test framework using the `VideoFrameExtractor` utility class located in `tests/utils/video_frame_extractor.py`. This utility:
+- Extracts frames from test videos at configurable intervals (default: 0.35 seconds matching iOS frame rate)
+- Resizes and compresses frames to match iOS app behavior (configurable via `tests/config/test_frame_extraction.yaml`)
+- Saves frames to the configured output directory
+- Creates metadata files with timestamp information
 
-```bash
-cd backend
-pdm run python tests/extract_video_frames.py
-```
-
-This script:
-- Extracts frames from `tests/fixtures/video/test_video.mov` every 0.35 seconds (matching iOS frame rate)
-- Resizes and compresses frames to match iOS app behavior (640x480 max, JPEG quality 75)
-- Saves frames to `tests/fixtures/swing-detection/test_movie001/`
-- Creates `frames_info.json` with timestamp metadata
+The frame extraction happens automatically when running tests, but can also be done manually if needed using the VideoFrameExtractor class directly.
 
 #### 2. Environment Setup
 
@@ -56,34 +51,116 @@ This installs all required dependencies including:
 
 ### Running Tests
 
-#### Start the Backend Server
+#### Quick Command Reference
+
+```bash
+# Basic test run (auto cleanup)
+cd backend
+pdm run pytest tests/test_swing_detection_ws.py::test_swing_detection_three_swings -xvs
+
+# Preserve extracted frames (no cleanup)
+pdm run pytest tests/test_swing_detection_ws.py::test_swing_detection_three_swings -xvs --no-cleanup
+
+# Test against live server
+pdm run pytest tests/test_swing_detection_ws.py::test_swing_detection_three_swings -xvs --base-url http://localhost:8001
+
+# Combined: live server + preserve frames
+pdm run pytest tests/test_swing_detection_ws.py::test_swing_detection_three_swings -xvs \
+  --base-url http://localhost:8001 \
+  --no-cleanup
+
+# Manual testing with verbose output
+pdm run python test_swing_detection_live.py --base http://localhost:8001 --verbose
+```
+
+#### Test Execution Modes
+
+The swing detection tests support two execution modes:
+
+1. **Fixture Mode (Default)**: Automatically starts a test server
+2. **Live Server Mode**: Connects to an already-running server
+
+#### Fixture Mode (Self-Contained Testing)
 
 ```bash
 cd backend
-pdm run python main.py
+pdm run pytest tests/test_swing_detection_ws.py::test_swing_detection_three_swings -xvs
 ```
 
-The server will start on `http://localhost:8000` with WebSocket endpoint at `ws://localhost:8000/ws/detect-golf-swing`.
+This mode:
+- Automatically starts a test server on a free port
+- Runs tests against the fixture server
+- Shows server logs in the test output
+- Cleans up the server after tests complete
 
-#### Run Swing Detection Tests
+#### Live Server Mode (Test Against Running Server)
 
-In a separate terminal:
+First, start your server in one terminal:
 
 ```bash
 cd backend
-pdm run pytest tests/test_swing_detection_ws.py -v -s
+make backend  # or pdm run python start_server.py
 ```
 
-#### Manual Testing
+Then run tests against it in another terminal:
+
+```bash
+cd backend
+pdm run pytest tests/test_swing_detection_ws.py::test_swing_detection_three_swings -xvs --base-url http://localhost:8001
+```
+
+This mode:
+- Connects to your existing server
+- Server logs appear in the server terminal (not test output)
+- Useful for debugging server-side issues
+- Allows testing against different server configurations
+
+#### Frame Extraction Options
+
+By default, tests extract frames from the video before each run and clean up afterward. You can control this behavior:
+
+```bash
+# Preserve extracted frames after test (don't cleanup)
+pdm run pytest tests/test_swing_detection_ws.py::test_swing_detection_three_swings -xvs --no-cleanup
+
+# Run again - will reuse existing frames (faster)
+pdm run pytest tests/test_swing_detection_ws.py::test_swing_detection_three_swings -xvs --no-cleanup
+```
+
+Benefits of `--no-cleanup`:
+- Faster repeated test runs (no re-extraction)
+- Can inspect extracted frames in `tests/fixtures/extracted_frames/test_video/`
+- Useful for debugging what frames are being sent
+
+#### Combined Options
+
+You can combine live server mode with frame preservation:
+
+```bash
+# Test against live server and preserve frames
+pdm run pytest tests/test_swing_detection_ws.py::test_swing_detection_three_swings -xvs \
+  --base-url http://localhost:8001 \
+  --no-cleanup
+```
+
+#### Manual Testing Tools
 
 For interactive testing and debugging:
 
 ```bash
+# Run standalone test against live server
 cd backend
-pdm run python tests/test_swing_detection_ws.py --manual
+pdm run python test_swing_detection_live.py --base http://localhost:8001
+
+# With verbose output
+pdm run python test_swing_detection_live.py --base http://localhost:8001 --verbose
 ```
 
-This runs the simulation and displays real-time detection results.
+This provides detailed output including:
+- Frame-by-frame sending progress
+- Response status breakdown
+- Detected swings with confidence scores
+- Any errors encountered
 
 ### Test Cases
 

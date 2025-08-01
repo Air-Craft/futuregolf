@@ -69,6 +69,13 @@ def configure_container(config_module: Optional[Any] = None):
     
     # Register vision model factory
     def create_vision_model():
+        # Check if mock is requested
+        import os
+        if os.getenv("USE_MOCK_VISION") == "true":
+            from core.providers.vision_mock import MockVisionModel
+            logger.info("Using mock vision model for testing")
+            return MockVisionModel()
+        
         config = container.get(ConfigProvider)
         model_name = config.get("LLM_MODEL", "gemini-1.5-flash")
         

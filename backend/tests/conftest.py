@@ -359,9 +359,62 @@ def mock_gcs_client():
         yield mock_client
 
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+
+# Load .env file before tests run
+backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env_file = os.path.join(backend_dir, '.env')
+if os.path.exists(env_file):
+    load_dotenv(env_file)
+
 # Pytest configuration
+def pytest_addoption(parser):
+    """Add custom command line options"""
+    parser.addoption(
+        "--base-url",
+        action="store",
+        default=None,
+        help="Base URL of live server to test against (e.g., http://localhost:8001). If not provided, uses fixture server."
+    )
+    parser.addoption(
+        "--no-cleanup",
+        action="store_true",
+        default=False,
+        help="Don't cleanup extracted frames after test. Also reuse existing frames if present."
+    )
+
+
+@pytest.fixture
+def base_url(request):
+    """Get base URL from command line"""
+    return request.config.getoption("--base-url")
+
+
+@pytest.fixture
+def live_server_mode(base_url):
+    """Check if we're in live server mode"""
+    return base_url is not None
+
+
+@pytest.fixture
+def no_cleanup(request):
+    """Get no-cleanup flag from command line"""
+    return request.config.getoption("--no-cleanup")
+
+
 def pytest_configure(config):
-    """Configure pytest markers."""
+    """Configure pytest markers and environment."""
+    # Log environment loading status
+    api_keys = ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENAI_API_KEY']
+    found_keys = [key for key in api_keys if os.getenv(key)]
+    
+    if found_keys:
+        print(f"✅ Found API keys: {', '.join(found_keys)}")
+    else:
+        print("⚠️  WARNING: No AI API keys found in environment")
+    
+    # Configure markers
     config.addinivalue_line(
         "markers", "unit: mark test as unit test"
     )
@@ -382,4 +435,7 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers", "database: mark test as database test"
+    )
+    config.addinivalue_line(
+        "markers", "requires_api_key: mark test as requiring AI API key"
     )

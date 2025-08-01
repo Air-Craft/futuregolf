@@ -6,6 +6,16 @@ import os
 # Load environment variables FIRST before any other imports
 load_dotenv()
 
+# Debug: Check environment on startup
+if os.getenv('CHECK_ENV'):
+    print("=== Server Environment Check ===")
+    for key in ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENAI_API_KEY']:
+        val = os.getenv(key)
+        if val:
+            print(f"{key}: {len(val)} chars")
+        else:
+            print(f"{key}: Not set")
+
 # Import authentication routers AFTER loading env vars
 from api.auth_register import router as auth_register_router
 from api.auth_login import router as auth_login_router
@@ -19,6 +29,7 @@ from api.tts import router as tts_router
 from api.recording_voice import router as recording_voice_router
 from api.recording_swing import router as recording_swing_router
 from api.swing_detection_ws import router as swing_detection_ws_router
+from api.debug_info import router as debug_router
 
 app = FastAPI(
     title="FutureGolf API",
@@ -49,6 +60,7 @@ app.include_router(tts_router)
 app.include_router(recording_voice_router)
 app.include_router(recording_swing_router)
 app.include_router(swing_detection_ws_router)
+app.include_router(debug_router)
 
 @app.get("/")
 async def root():

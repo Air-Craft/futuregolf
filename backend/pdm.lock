@@ -5,7 +5,7 @@
 groups = ["default"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:9e0e326e6513e4cd56b6e7d5190297bcf704429212b7cfe3a2e308edcd30c5d0"
+content_hash = "sha256:512360d231f672126dc8eda60a5a41380a2ee70d0905b24d5782d6da93f3f742"
 
 [[metadata.targets]]
 requires_python = "==3.10.*"

@@ -58,48 +58,46 @@ class SwingDetectionSession:
             "timestamp": timestamp,
             "image": image_base64
         })
-        
+        # logger.debug(f"🖼️ Image timestamp: {timestamp}")
+
         # Sort by timestamp
         self.image_buffer.sort(key=lambda x: x["timestamp"])
         
-        # Trim buffer if too large
-        max_buffer = self.config.get("MAX_IMAGE_BUFFER", 30)
-        if len(self.image_buffer) > max_buffer:
-            self.image_buffer = self.image_buffer[-max_buffer:]
+        # NO TRIMMING - we keep all frames until swing is detected
+        # Buffer only clears after successful swing detection
         
         # Update timestamps
         if self.image_buffer:
             self.first_timestamp = self.image_buffer[0]["timestamp"]
             self.last_timestamp = self.image_buffer[-1]["timestamp"]
     
+        # logger.debug(f"🖼️ Image added:: first: {self.first_timestamp}, last: {self.last_timestamp}")
+
     def apply_rolling_window(self, current_timestamp: float):
-        """Remove images older than CONTEXT_EXPIRY_SECONDS"""
-        expiry_seconds = self.config.get("CONTEXT_EXPIRY_SECONDS", 15.0)
-        cutoff_time = current_timestamp - expiry_seconds
-        self.image_buffer = [
-            img for img in self.image_buffer 
-            if img["timestamp"] > cutoff_time
-        ]
-        
-        # Update first timestamp
-        if self.image_buffer:
-            self.first_timestamp = self.image_buffer[0]["timestamp"]
-        else:
-            self.first_timestamp = None
+        """DEPRECATED - We no longer use rolling windows
+        Buffer is kept intact until swing detection, then cleared completely
+        """
+        pass  # Method kept for backwards compatibility but does nothing
     
     def should_submit_to_llm(self) -> bool:
         """Check if we should submit to LLM based on time threshold"""
-        if not self.first_timestamp or not self.last_timestamp:
+        if not self.last_timestamp:
+            # This is normal when buffer is empty or has single frame
             return False
         
         time_span = self.last_timestamp - self.first_timestamp
-        threshold = self.config.get("LLM_SUBMISSION_THRESHOLD", 2.0)
+        threshold = self.config.get("LLM_SUBMISSION_THRESHOLD", 1.0)
+        
+        # Only log when we're close to threshold to reduce noise
+        if time_span >= threshold * 0.8:
+            logger.debug(f"⏳ Time span: {time_span:.2f}s (threshold: {threshold:.2f}s)")
+        
         return time_span >= threshold
     
     def get_context_info(self) -> Dict[str, Any]:
         """Get current context window and size information"""
         context_window = 0.0
-        if self.first_timestamp and self.last_timestamp:
+        if self.last_timestamp:
             context_window = self.last_timestamp - self.first_timestamp
         
         # Estimate context size (simplified - just count images)
@@ -119,6 +117,7 @@ class SwingDetectionSession:
     
     async def analyze_for_swing(self) -> Dict[str, Any]:
         """Analyze image sequence for golf swing using vision model"""
+        
         # Take a snapshot of current buffer for analysis
         # This allows us to continue collecting frames while analyzing
         snapshot_buffer = self.image_buffer.copy()
@@ -148,7 +147,7 @@ class SwingDetectionSession:
             
             # Calculate response time
             response_time = (datetime.now() - start_time).total_seconds()
-            logger.info(f"🕐 LLM response time: {response_time:.2f}s")
+            logger.info(f"🗣️ LLM Reponse {result} in time {response_time:.2f}s")
             
             # Store confidence for later use
             self.last_confidence = result.get("confidence", 0.0)
@@ -240,10 +239,12 @@ session_manager = SwingDetectionManager()
 
 @router.websocket("/detect-golf-swing")
 async def detect_golf_swing_websocket(websocket: WebSocket):
+    logger.setLevel(logging.DEBUG)
     """
     WebSocket endpoint for golf swing detection
     Accepts stream of images with timestamps and detects complete swings
     """
+    logger.debug(f"🪢 websocket::Detect Golf Swing")
     
     # Configure container on first use (lazy initialization)
     if not container.has(ConfigProvider):
@@ -267,14 +268,16 @@ async def detect_golf_swing_websocket(websocket: WebSocket):
     
     try:
         while True:
+        
             # Receive message from client
             data = await websocket.receive_json()
-            
+
             # Extract timestamp and image
             timestamp = data.get("timestamp")
             image_base64 = data.get("image_base64")
-            
+
             if timestamp is None or not image_base64:
+                logger.debug(f"Missing timestamp or image_base64: {data}")
                 await websocket.send_json({
                     "error": "Missing timestamp or image_base64"
                 })
@@ -292,7 +295,7 @@ async def detect_golf_swing_websocket(websocket: WebSocket):
             if session.cooldown_until and current_time < session.cooldown_until:
                 # Still in cooldown, send waiting response
                 cooldown_remaining = session.cooldown_until - current_time
-                logger.debug(f"⏸️ Frame at {current_time:.2f}s ignored - in cooldown for {cooldown_remaining:.1f}s more")
+                logger.debug(f"❄️ Frame at {current_time:.2f}s ignored - in cooldown for {cooldown_remaining:.1f}s more")
                 response = {
                     "status": "cooldown",
                     "cooldown_remaining": cooldown_remaining,
@@ -301,14 +304,16 @@ async def detect_golf_swing_websocket(websocket: WebSocket):
                 await websocket.send_json(response)
                 continue
             
-            # Apply rolling window to remove old images
-            session.apply_rolling_window(current_time)
+            # Don't apply rolling window - user specified we should only clear on swing detection
+            # This prevents losing frames during analysis
+            # session.apply_rolling_window(current_time)
             
             # Get context info
             context_info = session.get_context_info()
             
             # Check if currently analyzing
             if session.is_analyzing:
+                # logger.debug("🤔 Currently analyzing")
                 # Send analyzing status while LLM is processing
                 elapsed = datetime.now().timestamp() - session.analysis_start_time if session.analysis_start_time else 0
                 logger.debug(f"⏳ Currently analyzing, elapsed: {elapsed:.2f}s")
@@ -324,6 +329,7 @@ async def detect_golf_swing_websocket(websocket: WebSocket):
             
             # Check if there's a completed analysis to process
             if session.analysis_task and session.analysis_task.done():
+                logger.debug("✅ analysis done")
                 # Get the result
                 result = session.analysis_result
                 session.analysis_task = None
@@ -358,7 +364,7 @@ async def detect_golf_swing_websocket(websocket: WebSocket):
                     session.analysis_start_time = None
                 else:
                     # Continue collecting data
-                    session.is_analyzing = False
+                    # session.is_analyzing = False #!!! It's too late here! Needs to be done in background or this needs to move up
                     session.analysis_start_time = None
                     if swing_detected and confidence < confidence_threshold:
                         logger.info(f"❌ Low confidence swing rejected: {confidence} < {confidence_threshold}")
@@ -375,11 +381,15 @@ async def detect_golf_swing_websocket(websocket: WebSocket):
                 # Create background task for analysis
                 async def analyze_and_store():
                     result = await session.analyze_for_swing()
+                    # print("💎 HEY IM done")
                     session.analysis_result = result
+                    session.is_analyzing = False 
                 
                 # Start analysis in background
+                logger.debug("🧌 Starting analysis in background...")
                 session.analysis_task = asyncio.create_task(analyze_and_store())
                 
+                # Check if we're analyzing
                 # Send analyzing status
                 response = {
                     "status": "analyzing",
@@ -390,6 +400,8 @@ async def detect_golf_swing_websocket(websocket: WebSocket):
                 }
                 await websocket.send_json(response)
             else:
+
+                logger.debug("should_submit_to_llm said no")
                 # Not enough data yet or still analyzing
                 if session.is_analyzing:
                     # Still analyzing, send status

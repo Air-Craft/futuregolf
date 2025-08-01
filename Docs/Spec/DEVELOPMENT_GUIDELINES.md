@@ -18,6 +18,36 @@
 #### Global State & DI
 - Use a lightweight **Dependency Injection** system (e.g. environment objects, `@MainActor class AppContainer`) to inject services and global state.
 - Shared state should be managed via a **single source of truth** pattern (e.g. `@Observable`, `@Published`, or modern `ObservableStateObject` pattern).
+- Use @ObservedObject, @StateObject, @EnvironmentObject patterns appropriately where possible.
+
+##### DI Pattern 
+
+````swift
+class AppDependencies: ObservableObject {
+    let authService = AuthService()
+    let settings = SettingsService()
+}
+
+@main
+struct MyApp: App {
+    @StateObject var deps = AppDependencies()
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .environmentObject(deps.authService)
+                .environmentObject(deps.settings)
+        }
+    }
+}
+````
+
+And now all views downstream can do:
+
+````swift
+@EnvironmentObject var authService: AuthService
+@EnvironmentObject var settings: SettingsService
+````
 
 #### Navigation
 - Use `NavigationStack` and route via a `Router` abstraction controlled by the ViewModel.
