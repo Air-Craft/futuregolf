@@ -76,7 +76,7 @@ class RecordingViewModel: NSObject {
     private var shouldCaptureNextFrame = false  // Flag to capture next frame
     private var activeAnalysisTasks = Set<Task<Void, Never>>()  // Track active analysis tasks
     
-    // MARK: - Camera Properties  
+    // MARK: - Camera Properties
     var preferredFrameRate: Double { CameraConfiguration.preferredFrameRate }
     var fallbackFrameRate: Double { CameraConfiguration.fallbackFrameRate }
     var minFrameRate: Double { CameraConfiguration.minFrameRate }
@@ -421,7 +421,7 @@ class RecordingViewModel: NSObject {
                 let isHighRes = dimensions.width >= 1920 && dimensions.height >= 1080
                 
                 for range in frameRateRanges {
-                    if range.maxFrameRate > maxAvailableFrameRate || 
+                    if range.maxFrameRate > maxAvailableFrameRate ||
                        (range.maxFrameRate == maxAvailableFrameRate && isHighRes && (bestFormat == nil || !isFormatHighRes(bestFormat!))) {
                         bestFormat = format
                         maxAvailableFrameRate = range.maxFrameRate
@@ -463,7 +463,7 @@ class RecordingViewModel: NSObject {
                     connection.preferredVideoStabilizationMode = .auto
                 }
                 
-                // Set video orientation for portrait mode  
+                // Set video orientation for portrait mode
                 if #available(iOS 17.0, *) {
                     if connection.isVideoRotationAngleSupported(90) {
                         connection.videoRotationAngle = 90 // Portrait mode
@@ -499,7 +499,7 @@ class RecordingViewModel: NSObject {
                 
                 // Configure connection
                 if let connection = output.connection(with: .video) {
-                    // Set video orientation for portrait mode  
+                    // Set video orientation for portrait mode
                     if #available(iOS 17.0, *) {
                         if connection.isVideoRotationAngleSupported(90) {
                             connection.videoRotationAngle = 90 // Portrait mode
@@ -697,9 +697,9 @@ class RecordingViewModel: NSObject {
     
     func captureStillForAnalysis() {
         guard currentPhase == .recording,
-              isProcessingEnabled else { 
+              isProcessingEnabled else {
             print("🛑 Skipping frame capture request - not in recording phase or processing disabled")
-            return 
+            return
         }
         
         // Set flag to capture next video frame
@@ -750,9 +750,9 @@ class RecordingViewModel: NSObject {
     
     func processStillImage(_ image: UIImage) {
         // Only process if enabled
-        guard isProcessingEnabled else { 
+        guard isProcessingEnabled else {
             print("🛑 Skipping still image processing - processing disabled")
-            return 
+            return
         }
         
         // Send to server for swing detection
@@ -827,7 +827,7 @@ class RecordingViewModel: NSObject {
         } else {
             // Fallback to REST API if WebSocket not connected
             let response = try await recordingAPIService.analyzeSwingFromImage(
-                image, 
+                image,
                 sequenceNumber: stillSequenceNumber
             )
             
@@ -837,7 +837,7 @@ class RecordingViewModel: NSObject {
             print("Swing detection (REST): \(response.swingDetected), confidence: \(response.confidence), phase: \(response.swingPhase ?? "none")")
             
             // Return true if swing detected with high confidence
-            return response.swingDetected && response.confidence > 0.75
+            return response.swingDetected && response.confidence > Config.swingDetectConfidenceThreshold
         }
     }
     
@@ -856,7 +856,7 @@ class RecordingViewModel: NSObject {
     }
     
     func handleInsufficientStorage() {
-        errorType = .insufficientStorage  
+        errorType = .insufficientStorage
         currentPhase = .error
     }
     
@@ -924,8 +924,8 @@ extension RecordingViewModel: AVCaptureFileOutputRecordingDelegate {
 
 extension RecordingViewModel: AVCaptureVideoDataOutputSampleBufferDelegate {
     
-    nonisolated func captureOutput(_ output: AVCaptureOutput, 
-                                   didOutput sampleBuffer: CMSampleBuffer, 
+    nonisolated func captureOutput(_ output: AVCaptureOutput,
+                                   didOutput sampleBuffer: CMSampleBuffer,
                                    from connection: AVCaptureConnection) {
         // Check if we should capture this frame
         Task { @MainActor in

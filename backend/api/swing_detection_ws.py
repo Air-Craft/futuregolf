@@ -257,13 +257,12 @@ async def detect_golf_swing_websocket(websocket: WebSocket):
     
     # Get config for logging
     config = container.get(ConfigProvider)
-    frame_interval = config.get("IOS_FRAME_INTERVAL", 0.5)
     submission_threshold = config.get("LLM_SUBMISSION_THRESHOLD", 2.0)
     cooldown = config.get("POST_DETECTION_COOLDOWN", 2.0)
     confidence_threshold = config.get("CONFIDENCE_THRESHOLD", 0.75)
     
     logger.info(f"🚀 New swing detection session started: {session_id}")
-    logger.info(f"⚙️ Settings: interval={frame_interval}s, threshold={submission_threshold}s, cooldown={cooldown}s, confidence>={confidence_threshold}")
+    logger.info(f"⚙️ Settings: threshold={submission_threshold}s, cooldown={cooldown}s, confidence>={confidence_threshold}")
     logger.info(f"🤖 Using model: {session.vision_model.get_model_info()}")
     
     try:
