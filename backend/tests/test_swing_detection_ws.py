@@ -94,16 +94,15 @@ class SwingDetectionTestClient:
     async def simulate_ios_streaming(self, frames: List[Dict[str, Any]]):
         """
         Simulate iOS app behavior:
-        - Stream images continuously  
-        - Check for swing detection every 1.25 seconds
+        - Stream images rapidly (no delays) 
+        - Timestamps in frames maintain temporal relationships
         - Reset queue when swing is detected
         """
         
         print(f"\nStarting swing detection simulation with {len(frames)} frames")
-        print(f"Frame submission interval: {FRAME_SUBMISSION_INTERVAL}s")
+        print("Sending frames rapidly (timestamps maintain video timing)")
         
         frame_idx = 0
-        last_submission_time = 0.0
         
         while frame_idx < len(frames):
             current_frame = frames[frame_idx]
@@ -111,13 +110,13 @@ class SwingDetectionTestClient:
             # Add frame to queue
             self.image_queue.append(current_frame)
             
-            # Send current frame
+            # Send current frame immediately (no delay)
             await self.send_frame(
                 current_frame['timestamp'],
                 current_frame['image_base64']
             )
             
-            # Receive response
+            # Receive response immediately
             response = await self.receive_response()
             self.all_responses.append(response)
             
@@ -128,11 +127,13 @@ class SwingDetectionTestClient:
                     'frame_index': frame_idx,
                     'queue_size': len(self.image_queue),
                     'context_window': response.get('context_window', 0),
-                    'context_size': response.get('context_size', 0)
+                    'context_size': response.get('context_size', 0),
+                    'confidence': response.get('confidence', 0.0)
                 }
                 self.swings_detected.append(swing_info)
                 
                 print(f"\n✅ SWING DETECTED at {response['timestamp']}s!")
+                print(f"   Confidence: {response.get('confidence', 0.0):.2f}")
                 print(f"   Queue size: {len(self.image_queue)} frames")
                 print(f"   Context window: {response.get('context_window', 0):.2f}s")
                 print(f"   Context size: {response.get('context_size', 0)} KB")
@@ -140,13 +141,13 @@ class SwingDetectionTestClient:
                 # Reset queue after swing detection
                 self.image_queue = []
                 self.current_queue_start_idx = frame_idx + 1
-                last_submission_time = current_frame['timestamp']
-                
             else:
-                # Check status
+                # Check status and confidence
                 status = response.get('status', 'unknown')
+                confidence = response.get('confidence', 0.0)
                 if frame_idx % 10 == 0:  # Log every 10th frame
                     print(f"Frame {frame_idx}: {status} - "
+                          f"Confidence: {confidence:.2f}, "
                           f"Context window: {response.get('context_window', 0):.2f}s, "
                           f"Context size: {response.get('context_size', 0)} KB")
             
@@ -172,9 +173,10 @@ async def test_swing_detection_three_swings():
         # Run simulation
         await client.simulate_ios_streaming(frames)
         
-        # Verify results - expecting 3-4 swings (AI may interpret partial swings differently)
-        assert 3 <= len(client.swings_detected) <= 4, \
-            f"Expected 3-4 swings, but detected {len(client.swings_detected)}"
+        # Verify results - expecting 3 high-confidence swings  
+        high_confidence_swings = [s for s in client.swings_detected if s['confidence'] >= 0.75]
+        assert len(high_confidence_swings) == 3, \
+            f"Expected 3 high-confidence swings (>= 0.75), but detected {len(high_confidence_swings)}"
         
         # Print swing detection summary
         print("\n📊 SWING DETECTION SUMMARY:")
@@ -182,6 +184,7 @@ async def test_swing_detection_three_swings():
         for i, swing in enumerate(client.swings_detected, 1):
             print(f"Swing {i}:")
             print(f"  - Detected at: {swing['timestamp']}s")
+            print(f"  - Confidence: {swing['confidence']:.2f}")
             print(f"  - Frame index: {swing['frame_index']}")
             print(f"  - Queue size: {swing['queue_size']}")
             print(f"  - Context window: {swing['context_window']:.2f}s")

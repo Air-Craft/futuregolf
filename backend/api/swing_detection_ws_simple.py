@@ -31,7 +31,10 @@ from config.swing_detection import (
     CONTEXT_EXPIRY_SECONDS,
     MAX_IMAGE_BUFFER,
     IMAGE_MAX_SIZE,
-    IMAGE_JPEG_QUALITY
+    IMAGE_JPEG_QUALITY,
+    CONFIDENCE_THRESHOLD,
+    POST_DETECTION_COOLDOWN,
+    IMAGE_CONVERT_BW
 )
 
 router = APIRouter(prefix="/ws", tags=["swing_detection"])
@@ -51,6 +54,9 @@ class SwingDetectionSession:
         self.first_timestamp: Optional[float] = None
         self.last_timestamp: Optional[float] = None
         self.conversation_history: List[Dict[str, Any]] = []
+        self.last_confidence: Optional[float] = None
+        self.cooldown_until: Optional[float] = None
+        self.swings_detected: int = 0
         
         # Initialize Gemini model
         self.model = genai.GenerativeModel(
@@ -136,17 +142,30 @@ class SwingDetectionSession:
             parts = []
             
             # Add the prompt
-            parts.append("""The following image sequence shows a golfer. Does it represent a full golf swing from address to follow-through?
+            parts.append("""You are analyzing a sequence of images from a golf swing video. Determine if this shows a golf swing.
 
-A complete golf swing must include:
-1. Setup/Address position
-2. Takeaway and backswing
-3. Transition at the top
-4. Downswing through impact
-5. Follow-through to finish
+CRITERIA for detecting a golf swing:
+1. Setup/Address: Player standing over ball, club at rest
+2. Backswing: Club moves back and up to the top
+3. Downswing: Club accelerates down toward ball
+4. Impact: Club contacts ball
+5. Follow-through: Club continues up after impact (SWING IS COMPLETE HERE)
 
-Only respond "yes" if you see a COMPLETE swing sequence from start to finish.
-Respond with JSON: {"swing_detected": true/false, "reason": "brief explanation"}""")
+IMPORTANT: 
+- Detect the swing as soon as follow-through is visible. Don't wait for full finish.
+- Only detect ONE swing per sequence.
+- A person simply moving out of frame or adjusting position is NOT a swing.
+- If the sequence shows someone mid-swing or ending a swing, that's NOT a complete swing.
+
+Confidence scoring:
+- 0.9-1.0: Clear swing with follow-through visible
+- 0.8-0.9: Swing detected, minor visibility issues
+- 0.7-0.8: Likely swing, some phases unclear
+- 0.5-0.7: Questionable, missing key phases
+- 0.0-0.5: Not a swing (partial, practice motion, or person exiting)
+
+Be conservative - when in doubt, give lower confidence.
+Respond with JSON: {"swing_detected": true/false, "confidence": 0.0-1.0}""")
             
             # Add images
             for idx, img_data in enumerate(self.image_buffer):
@@ -179,8 +198,11 @@ Respond with JSON: {"swing_detected": true/false, "reason": "brief explanation"}
                 # Fallback parsing
                 result = {
                     "swing_detected": False,
-                    "reason": "Could not parse response"
+                    "confidence": 0.0
                 }
+            
+            # Store confidence for later use
+            self.last_confidence = result.get("confidence", 0.0)
             
             logger.info(f"Swing analysis result: {result}")
             return result
@@ -189,7 +211,7 @@ Respond with JSON: {"swing_detected": true/false, "reason": "brief explanation"}
             logger.error(f"Error analyzing swing: {e}")
             return {
                 "swing_detected": False,
-                "reason": f"Analysis error: {str(e)}"
+                "confidence": 0.0
             }
 
 class SwingDetectionManager:
@@ -223,8 +245,10 @@ def resize_and_compress_image(image_base64: str) -> str:
         image_bytes = base64.b64decode(image_base64)
         image = Image.open(BytesIO(image_bytes))
         
-        # Convert to RGB if necessary
-        if image.mode != 'RGB':
+        # Convert to grayscale if configured
+        if IMAGE_CONVERT_BW:
+            image = image.convert('L')
+        elif image.mode != 'RGB':
             image = image.convert('RGB')
         
         # Resize maintaining aspect ratio
@@ -277,8 +301,20 @@ async def detect_golf_swing_websocket(websocket: WebSocket):
             # Add image to buffer
             session.add_image(float(timestamp), compressed_image)
             
+            # Check if we're in cooldown period
+            current_time = float(timestamp)
+            if session.cooldown_until and current_time < session.cooldown_until:
+                # Still in cooldown, send waiting response
+                response = {
+                    "status": "cooldown",
+                    "cooldown_remaining": session.cooldown_until - current_time,
+                    "swings_detected": session.swings_detected
+                }
+                await websocket.send_json(response)
+                continue
+            
             # Apply rolling window to remove old images
-            session.apply_rolling_window(float(timestamp))
+            session.apply_rolling_window(current_time)
             
             # Get context info
             context_info = session.get_context_info()
@@ -288,28 +324,49 @@ async def detect_golf_swing_websocket(websocket: WebSocket):
                 # Analyze for swing
                 result = await session.analyze_for_swing()
                 
-                if result.get("swing_detected", False):
+                confidence = result.get("confidence", 0.0)
+                swing_detected = result.get("swing_detected", False)
+                
+                # Check if confidence meets threshold
+                if swing_detected and confidence >= CONFIDENCE_THRESHOLD:
                     # Send detection response
                     response = {
                         "status": "evaluated",
                         "swing_detected": True,
+                        "confidence": confidence,
                         "timestamp": timestamp,
                         "context_window": context_info["context_window"],
                         "context_size": context_info["context_size"]
                     }
                     await websocket.send_json(response)
                     
+                    # Check if we've detected 3 swings (for testing)
+                    if session.swings_detected >= 3:
+                        await websocket.send_json({
+                            "status": "test_complete",
+                            "message": "3 swings detected, test complete",
+                            "total_swings": session.swings_detected
+                        })
+                        break
+                    
                     # Clear context for next swing
                     session.clear_context()
-                    logger.info(f"Swing detected in session {session_id}")
+                    session.swings_detected += 1
+                    session.cooldown_until = timestamp + POST_DETECTION_COOLDOWN
+                    logger.info(f"Swing {session.swings_detected} detected in session {session_id} with confidence {confidence}")
                 else:
                     # Continue collecting data
                     response = {
                         "status": "awaiting_more_data",
+                        "swing_detected": False,
+                        "confidence": confidence if swing_detected else 0.0,
                         "context_window": context_info["context_window"],
                         "context_size": context_info["context_size"]
                     }
                     await websocket.send_json(response)
+                    
+                    if swing_detected and confidence < CONFIDENCE_THRESHOLD:
+                        logger.info(f"Low confidence swing rejected: {confidence} < {CONFIDENCE_THRESHOLD}")
             else:
                 # Not enough data yet
                 response = {

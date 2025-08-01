@@ -58,12 +58,14 @@
       "Bash(xcrun simctl shutdown:*)",
       "Bash(xcrun simctl device booted spawn:*)",
       "Bash(xcrun simctl terminate:*)",
-      "Bash(plutil:*)"
+      "Bash(plutil:*)",
+      "Bash(pdm run:*)"
     ],
     "deny": []
   },
   "enabledMcpjsonServers": [
     "neon",
     "ios-simulator"
-  ]
+  ],
+  "$schema": "https://json.schemastore.org/claude-code-settings.json"
 }

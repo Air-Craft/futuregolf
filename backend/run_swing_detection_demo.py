@@ -40,8 +40,15 @@ async def main():
         print("📊 RESULTS SUMMARY")
         print("=" * 50)
         print(f"Total swings detected: {len(client.swings_detected)}")
-        print(f"Expected: 3-4 swings (AI interpretation may vary)")
-        print(f"Status: {'✅ PASS' if 3 <= len(client.swings_detected) <= 4 else '❌ FAIL'}")
+        
+        # Show confidence scores
+        for i, swing in enumerate(client.swings_detected, 1):
+            print(f"  Swing {i}: confidence = {swing.get('confidence', 0.0):.2f}")
+        
+        high_confidence = [s for s in client.swings_detected if s.get('confidence', 0.0) >= 0.7]
+        print(f"\nHigh-confidence swings (>= 0.7): {len(high_confidence)}")
+        print(f"Expected: 3 high-confidence swings")
+        print(f"Status: {'✅ PASS' if len(high_confidence) == 3 else '❌ FAIL'}")
         
     except Exception as e:
         print(f"❌ Error: {e}")

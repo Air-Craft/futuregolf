@@ -12,15 +12,22 @@ load_dotenv()
 LLM_MODEL = os.getenv("SWING_DETECTION_LLM_MODEL", "gemini/gemini-1.5-flash-002")
 
 # Timing thresholds (in seconds)
-LLM_SUBMISSION_THRESHOLD = float(os.getenv("LLM_SUBMISSION_THRESHOLD", "1.25"))
+LLM_SUBMISSION_THRESHOLD = float(os.getenv("LLM_SUBMISSION_THRESHOLD", "2.0"))
 CONTEXT_EXPIRY_SECONDS = float(os.getenv("CONTEXT_EXPIRY_SECONDS", "5.0"))
 
 # Buffer limits
 MAX_IMAGE_BUFFER = int(os.getenv("MAX_IMAGE_BUFFER", "100"))
 
 # Frame rate from iOS app (for testing)
-IOS_FRAME_INTERVAL = float(os.getenv("IOS_FRAME_INTERVAL", "0.35"))
+IOS_FRAME_INTERVAL = float(os.getenv("IOS_FRAME_INTERVAL", "0.5"))
 
 # Image processing settings
-IMAGE_MAX_SIZE = (640, 480)
-IMAGE_JPEG_QUALITY = 75
+IMAGE_MAX_SIZE = (320, 240)
+IMAGE_JPEG_QUALITY = 60
+IMAGE_CONVERT_BW = True
+
+# Confidence threshold for swing detection
+CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.75"))
+
+# Post-detection cooldown (seconds)
+POST_DETECTION_COOLDOWN = float(os.getenv("POST_DETECTION_COOLDOWN", "2.0"))
