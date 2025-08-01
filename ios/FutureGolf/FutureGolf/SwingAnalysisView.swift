@@ -31,18 +31,15 @@ struct SwingAnalysisView: View {
                     .ignoresSafeArea()
                 
                 Group {
-                    if viewModel.isOffline {
-                        offlineView
-                            .transition(.opacity.combined(with: .scale))
-                    } else if viewModel.isLoading {
+                    if viewModel.isLoading || viewModel.isOffline {
                         processingView
                             .transition(.opacity.combined(with: .scale))
                     } else if viewModel.analysisResult != nil {
                         analysisContentView
                             .liquidGlassTransition(isVisible: !viewModel.isLoading)
                     } else {
-                        // Show offline view as default when no result yet
-                        offlineView
+                        // Show processing view as default when no result yet
+                        processingView
                             .transition(.opacity.combined(with: .scale))
                     }
                 }
@@ -104,6 +101,7 @@ struct SwingAnalysisView: View {
                 }
                 viewModel.cleanup()
             }
+            .accessibilityIdentifier("SwingAnalysisView")
             .sheet(isPresented: $showVideoPlayer) {
                 if let result = viewModel.analysisResult {
                     NavigationStack {
@@ -141,42 +139,45 @@ struct SwingAnalysisView: View {
     
     // MARK: - Computed Properties
     private var videoThumbnailHeight: CGFloat {
+        // Fixed height based on 16:9 aspect ratio
+        let screenWidth = UIScreen.main.bounds.width
+        let padding: CGFloat = 32 // 16 on each side
+        let availableWidth = screenWidth - padding
+        // Calculate height for 16:9 aspect ratio
+        let height = (availableWidth * 9) / 16
+        
+        // Cap at reasonable maximum for iPad
         if UIDevice.current.userInterfaceIdiom == .pad {
-            return 400
+            return min(height, 400)
         }
-        return UIDevice.current.orientation.isLandscape ? 200 : 300
+        return min(height, 250)
     }
     
     // MARK: - Offline View
     private var offlineView: some View {
         VStack(spacing: Spacing.extraLarge) {
-            // Video Thumbnail
+            // Video Thumbnail with busy indicator
             ZStack {
                 if let thumbnail = viewModel.videoThumbnail {
                     Image(uiImage: thumbnail)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(maxHeight: videoThumbnailHeight)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .frame(height: videoThumbnailHeight)
                 } else {
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Material.ultraThin)
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
                         .frame(height: videoThumbnailHeight)
                 }
                 
-                // Offline indicator overlay
-                VStack(spacing: 16) {
-                    Image(systemName: "wifi.slash")
-                        .font(.system(size: 48))
-                        .foregroundColor(.white)
-                    
-                    Text("Waiting for Connection")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black.opacity(0.6))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                // Always show busy indicator when offline
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.5)
+                    .background(
+                        Circle()
+                            .fill(Color.black.opacity(0.6))
+                            .frame(width: 60, height: 60)
+                    )
             }
             .padding(.horizontal)
             
@@ -192,79 +193,14 @@ struct SwingAnalysisView: View {
             }
             .padding(.horizontal)
             
-            // Status Message
-            VStack(spacing: 8) {
-                Text("Your swing will be analyzed when connection is restored")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                
-                Text("We'll notify you when it's ready")
-                    .font(.caption)
-                    .foregroundColor(.secondary.opacity(0.8))
-            }
-            .padding(.horizontal)
-            
-            Spacer()
-        }
-        .padding(.vertical)
-    }
-    
-    // MARK: - Processing View
-    private var processingView: some View {
-        VStack(spacing: Spacing.extraLarge) {
-            // Video Thumbnail with Processing Indicator
-            ZStack {
-                if let thumbnail = viewModel.videoThumbnail {
-                    Image(uiImage: thumbnail)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxHeight: videoThumbnailHeight)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.black.opacity(0.4))
-                        }
-                } else {
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(height: videoThumbnailHeight)
-                }
-                
-                // Processing indicator
-                VStack(spacing: 16) {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                        .tint(.white)
-                    
-                    Text(viewModel.processingStatus)
-                        .font(.headline)
-                        .foregroundColor(.white)
-                }
-            }
-            .padding(.horizontal)
-            
-            // Progress Bar
-            VStack(alignment: .leading, spacing: 8) {
-                ProgressView(value: viewModel.processingProgress)
-                    .tint(.fairwayGreen)
-                    .scaleEffect(y: 2)
-                    .animation(.liquidGlassSmooth, value: viewModel.processingProgress)
-                
-                Text(viewModel.processingDetail)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal)
-            
-            // Collapsed Analysis Section
+            // Expandable Analysis Section (UI Scaffolding)
             LiquidGlassCard {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Analysis Details")
                             .font(.headline)
                             .foregroundColor(.glassText)
-                        Text("Processing swing data...")
+                        Text("Waiting for connection to analyze swing")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -283,6 +219,174 @@ struct SwingAnalysisView: View {
                 withAnimation(.liquidGlassSpring) {
                     expandedSection.toggle()
                 }
+            }
+            
+            // Expanded content when tapped
+            if expandedSection {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Your swing video has been saved and will be analyzed as soon as connection is restored.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+                    
+                    // Placeholder sections
+                    ForEach(["Key Points", "Technique Analysis", "Recommendations"], id: \.self) { section in
+                        LiquidGlassCard {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(section)
+                                    .font(.headline)
+                                    .foregroundColor(.glassText)
+                                Text("Waiting for analysis...")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding()
+                        }
+                        .padding(.horizontal)
+                        .opacity(0.6)
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+            
+            Spacer()
+        }
+        .padding(.top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    // MARK: - Processing View
+    private var processingView: some View {
+        VStack(spacing: Spacing.extraLarge) {
+            // Video Thumbnail with busy indicator or play button
+            ZStack {
+                if let thumbnail = viewModel.videoThumbnail {
+                    Image(uiImage: thumbnail)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: videoThumbnailHeight)
+                } else {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(height: videoThumbnailHeight)
+                }
+                
+                // Overlay based on state
+                if viewModel.isOffline || viewModel.isLoading || !viewModel.isAnalysisTTSReady {
+                    // Busy indicator while waiting
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+                        .background(
+                            Circle()
+                                .fill(Color.black.opacity(0.6))
+                                .frame(width: 60, height: 60)
+                        )
+                } else if viewModel.analysisResult != nil && viewModel.isAnalysisTTSReady {
+                    // Play button when TTS is ready
+                    Button(action: {
+                        showVideoPlayer = true
+                        LiquidGlassHaptics.impact(.medium)
+                    }) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 70))
+                            .foregroundColor(.white)
+                            .background(
+                                Circle()
+                                    .fill(Color.black.opacity(0.3))
+                                    .blur(radius: 10)
+                            )
+                    }
+                }
+            }
+            .padding(.horizontal)
+            
+            // Processing Status
+            HStack(spacing: 12) {
+                if viewModel.isLoading && !viewModel.isOffline {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
+                
+                Text(viewModel.processingStatus)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+            }
+            .padding(.horizontal)
+            
+            // Progress Bar
+            VStack(alignment: .leading, spacing: 8) {
+                ProgressView(value: viewModel.isOffline ? 0.0 : viewModel.processingProgress)
+                    .tint(viewModel.isOffline ? .gray : .fairwayGreen)
+                    .scaleEffect(y: 2)
+                    .animation(.liquidGlassSmooth, value: viewModel.processingProgress)
+                
+                Text(viewModel.processingDetail)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal)
+            
+            // Collapsed Analysis Section
+            LiquidGlassCard {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Analysis Details")
+                            .font(.headline)
+                            .foregroundColor(.glassText)
+                        Text(viewModel.isOffline ? "Waiting for connection..." : 
+                             !viewModel.isAnalysisTTSReady ? "Preparing coaching audio..." : 
+                             "Processing swing data...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.down.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                        .rotationEffect(.degrees(expandedSection ? 180 : 0))
+                }
+                .padding()
+            }
+            .padding(.horizontal)
+            .onTapGesture {
+                withAnimation(.liquidGlassSpring) {
+                    expandedSection.toggle()
+                }
+            }
+            
+            // Expanded content for processing view
+            if expandedSection {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(viewModel.isOffline ? "Your swing will be analyzed when connection is restored." : 
+                         !viewModel.isAnalysisTTSReady ? "Preparing audio for your personalized coaching session..." :
+                         "Analyzing your swing technique...")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+                    
+                    // Placeholder sections
+                    ForEach(["Key Points", "Technique Analysis", "Recommendations"], id: \.self) { section in
+                        LiquidGlassCard {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(section)
+                                    .font(.headline)
+                                    .foregroundColor(.glassText)
+                                Text(viewModel.isOffline ? "Waiting for connection..." : 
+                                     !viewModel.isAnalysisTTSReady ? "Preparing audio..." :
+                                     "Processing...")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding()
+                        }
+                        .padding(.horizontal)
+                        .opacity(0.6)
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
             
             Spacer()
@@ -322,10 +426,9 @@ struct SwingAnalysisView: View {
                     Image(uiImage: thumbnail)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(maxHeight: videoThumbnailHeight)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .frame(height: videoThumbnailHeight)
                 } else {
-                    RoundedRectangle(cornerRadius: 16)
+                    Rectangle()
                         .fill(Material.ultraThin)
                         .frame(height: videoThumbnailHeight)
                 }

@@ -33,7 +33,7 @@ final class RecordingScreenTests: XCTestCase {
         XCTAssertEqual(recordingViewModel.minFrameRate, 24, "Minimum frame rate should be 24fps")
         XCTAssertEqual(recordingViewModel.resolution, .hd1920x1080, "Resolution should be 1080p")
         XCTAssertEqual(recordingViewModel.videoFormat, .mp4, "Format should be MP4")
-        XCTAssertTrue(recordingViewModel.isPortraitMode, "Should be in portrait mode")
+        XCTAssertEqual(recordingViewModel.deviceOrientation, .portrait, "Should be in portrait orientation")
         XCTAssertEqual(recordingViewModel.cameraPosition, .front, "Should default to front camera")
     }
     

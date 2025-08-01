@@ -37,7 +37,17 @@ struct FutureGolfApp: App {
     
     var body: some Scene {
         WindowGroup {
-            if debugLaunchRecording {
+            if TestConfiguration.shared.shouldShowSwingAnalysisDirectly {
+                // For UI testing - go directly to SwingAnalysisView
+                SwingAnalysisView(
+                    videoURL: getTestVideoURL(),
+                    analysisId: "test-analysis-001"
+                )
+                .withToastOverlay()
+                .onAppear {
+                    setupTestEnvironment()
+                }
+            } else if debugLaunchRecording {
                 // Launch directly into recording screen for testing
                 NavigationView {
                     DebugRecordingLauncher()
@@ -165,6 +175,35 @@ struct FutureGolfApp: App {
                 } else {
                     print("🚀 No network connection, will process when connection restored")
                 }
+            }
+        }
+    }
+    
+    private func getTestVideoURL() -> URL {
+        // Try to load test video from bundle
+        if let url = Bundle.main.url(forResource: "test_video", withExtension: "mov") {
+            return url
+        }
+        // Fallback to documents directory
+        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("test_video.mov")
+    }
+    
+    private func setupTestEnvironment() {
+        let config = TestConfiguration.shared
+        
+        // Set up mock view model state based on test mode
+        Task { @MainActor in
+            if config.analysisMode == .completed {
+                // Load mock analysis result
+                let mockResult = config.createMockAnalysisResult()
+                // Would set on view model if we had access
+            }
+            
+            // Inject mock connectivity if needed
+            if config.isUITesting && config.connectivityState == .offline {
+                // Use mock connectivity service
+                _ = MockConnectivityService.shared
             }
         }
     }

@@ -147,19 +147,23 @@ final class SwingAnalysisViewModelTests: XCTestCase {
     // MARK: - Storage Manager Tests
     
     func testStorageManagerSaveAndLoad() async {
-        let storageManager = AnalysisStorageManager()
+        let storageManager = AnalysisStorageManager.shared
         let mockResult = createMockAnalysisResult()
         let testURL = URL(fileURLWithPath: "/tmp/test_video.mp4")
         
         // Save analysis
-        await storageManager.saveAnalysis(mockResult, videoURL: testURL)
+        let analysisId = storageManager.saveAnalysis(videoURL: testURL, status: .pending)
+        
+        // Update with analysis result
+        storageManager.updateAnalysisResult(id: analysisId, result: mockResult)
         
         // Load analysis
-        let loadedResult = await storageManager.loadAnalysis(id: mockResult.id)
+        let loadedAnalysis = storageManager.getAnalysis(id: analysisId)
         
-        XCTAssertNotNil(loadedResult)
-        XCTAssertEqual(loadedResult?.id, mockResult.id)
-        XCTAssertEqual(loadedResult?.swingSpeed, mockResult.swingSpeed)
+        XCTAssertNotNil(loadedAnalysis)
+        XCTAssertEqual(loadedAnalysis?.id, analysisId)
+        XCTAssertEqual(loadedAnalysis?.analysisResult?.swingSpeed, mockResult.swingSpeed)
+        XCTAssertEqual(loadedAnalysis?.status, .completed)
     }
     
     // MARK: - Helper Methods

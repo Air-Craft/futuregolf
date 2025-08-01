@@ -30,6 +30,39 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D34969442E3D1A6C001D0B00 /* Exceptions for "FutureGolfTestsShared" folder in "FutureGolfUITests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				fixtures/test_analysis.json,
+				fixtures/test_video.mov,
+				"fixtures/test-talk-irrelevant-audio.wav",
+				"fixtures/test-talk-ok-lets-begin.wav",
+				"fixtures/test-talk-thats-enough.wav",
+			);
+			target = 37361DF62E33FCCA00909D7E /* FutureGolfUITests */;
+		};
+		D34969452E3D1A74001D0B00 /* Exceptions for "FutureGolfTestsShared" folder in "FutureGolf" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				fixtures/test_analysis.json,
+				fixtures/test_video.mov,
+				"fixtures/test-talk-irrelevant-audio.wav",
+				"fixtures/test-talk-ok-lets-begin.wav",
+				"fixtures/test-talk-thats-enough.wav",
+			);
+			target = 37361DDF2E33FCC900909D7E /* FutureGolf */;
+		};
+		D34969472E3D1A78001D0B00 /* Exceptions for "FutureGolfTestsShared" folder in "FutureGolfTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				fixtures/test_analysis.json,
+				fixtures/test_video.mov,
+				"fixtures/test-talk-irrelevant-audio.wav",
+				"fixtures/test-talk-ok-lets-begin.wav",
+				"fixtures/test-talk-thats-enough.wav",
+			);
+			target = 37361DEC2E33FCCA00909D7E /* FutureGolfTests */;
+		};
 		D35E066F2E3C2BBE007D8B6F /* Exceptions for "FutureGolf" folder in "FutureGolf" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -74,6 +107,16 @@
 			path = FutureGolfUITests;
 			sourceTree = "<group>";
 		};
+		D34969432E3D1A66001D0B00 /* FutureGolfTestsShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D34969452E3D1A74001D0B00 /* Exceptions for "FutureGolfTestsShared" folder in "FutureGolf" target */,
+				D34969472E3D1A78001D0B00 /* Exceptions for "FutureGolfTestsShared" folder in "FutureGolfTests" target */,
+				D34969442E3D1A6C001D0B00 /* Exceptions for "FutureGolfTestsShared" folder in "FutureGolfUITests" target */,
+			);
+			path = FutureGolfTestsShared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -108,6 +151,7 @@
 				37361DF02E33FCCA00909D7E /* FutureGolfTests */,
 				37361DFA2E33FCCA00909D7E /* FutureGolfUITests */,
 				37361DE12E33FCC900909D7E /* Products */,
+				D34969432E3D1A66001D0B00 /* FutureGolfTestsShared */,
 			);
 			sourceTree = "<group>";
 		};
@@ -138,6 +182,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				37361DE22E33FCC900909D7E /* FutureGolf */,
+				D34969432E3D1A66001D0B00 /* FutureGolfTestsShared */,
 			);
 			name = FutureGolf;
 			packageProductDependencies = (

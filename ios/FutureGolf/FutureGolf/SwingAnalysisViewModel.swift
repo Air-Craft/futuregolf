@@ -31,10 +31,16 @@ class SwingAnalysisViewModel: ObservableObject {
     var isOffline = false
     var offlineMessage = "Waiting for connection"
     
+    // TTS Cache state for this analysis
+    var isAnalysisTTSReady = false
+    var analysisTTSProgress: Double = 0.0
+    private var ttsCacheCheckTimer: Timer?
+    
     private let apiClient = APIClient()
     private var progressTimer: Timer?
     var videoURL: URL?
     private let storageManager = AnalysisStorageManager.shared
+    private let mediaStorage = AnalysisMediaStorage.shared
     private let connectivityService = ConnectivityService.shared
     private let processingService = VideoProcessingService.shared
     private var analysisId: String?
@@ -46,6 +52,14 @@ class SwingAnalysisViewModel: ObservableObject {
         print("🎆 videoURL: \(videoURL)")
         
         self.videoURL = videoURL
+        
+        // Check if we're in UI testing mode
+        let testConfig = TestConfiguration.shared
+        if testConfig.isUITesting {
+            print("🎆 UI Testing mode detected")
+            handleTestMode(testConfig: testConfig, videoURL: videoURL)
+            return
+        }
         
         // Create analysis record
         self.analysisId = storageManager.saveAnalysis(videoURL: videoURL, status: .pending)
@@ -91,6 +105,14 @@ class SwingAnalysisViewModel: ObservableObject {
         print("🎆 Analysis ID: \(id)")
         
         self.analysisId = id
+        
+        // Check if we're in UI testing mode
+        let testConfig = TestConfiguration.shared
+        if testConfig.isUITesting {
+            print("🎆 UI Testing mode detected for existing analysis")
+            handleTestMode(testConfig: testConfig, videoURL: nil, analysisId: id)
+            return
+        }
         
         // Set up connectivity monitoring
         setupConnectivityMonitoring()
@@ -145,6 +167,113 @@ class SwingAnalysisViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Test Mode Handling
+    
+    private func handleTestMode(testConfig: TestConfiguration, videoURL: URL?, analysisId: String? = nil) {
+        print("🎆 Handling test mode: \(testConfig.analysisMode)")
+        
+        self.analysisId = analysisId ?? "test-analysis-001"
+        
+        // Set video URL if provided, otherwise use test video
+        if let url = videoURL {
+            self.videoURL = url
+        } else {
+            self.videoURL = Bundle.main.url(forResource: "test_video", withExtension: "mov")
+        }
+        
+        // Generate thumbnail for test video
+        if let testVideoURL = self.videoURL {
+            Task {
+                await generateThumbnailAsync(from: testVideoURL)
+            }
+        }
+        
+        // Handle different test modes
+        switch testConfig.analysisMode {
+        case .offline:
+            handleOfflineTestMode(testConfig: testConfig)
+        case .processing:
+            handleProcessingTestMode(testConfig: testConfig)
+        case .ttsCaching:
+            handleTTSCachingTestMode(testConfig: testConfig)
+        case .ttsComplete:
+            handleTTSCompleteTestMode(testConfig: testConfig)
+        case .completed:
+            handleCompletedTestMode(testConfig: testConfig)
+        }
+    }
+    
+    private func handleOfflineTestMode(testConfig: TestConfiguration) {
+        print("🎆 Setting up offline test mode")
+        isOffline = true
+        isLoading = false
+        processingStatus = "Waiting for connectivity"
+        processingDetail = "Your swing will be analyzed when connection is restored"
+        ToastManager.shared.show("Waiting for connectivity...", type: .warning, duration: .infinity, id: "connectivity")
+    }
+    
+    private func handleProcessingTestMode(testConfig: TestConfiguration) {
+        print("🎆 Setting up processing test mode")
+        isOffline = false
+        isLoading = true
+        processingStatus = "Analyzing swing"
+        processingDetail = "Processing swing data..."
+        processingProgress = 0.3
+        
+        // Simulate processing progress
+        startProcessingSimulation()
+    }
+    
+    private func handleTTSCachingTestMode(testConfig: TestConfiguration) {
+        print("🎆 Setting up TTS caching test mode")
+        isOffline = false
+        isLoading = true
+        processingStatus = "Preparing coaching audio"
+        processingDetail = "Preparing audio for your personalized coaching session..."
+        isAnalysisTTSReady = false
+        analysisTTSProgress = 0.7
+        
+        // Load mock analysis data but keep loading state for TTS
+        let mockResult = testConfig.createMockAnalysisResult()
+        self.analysisResult = mockResult
+        updateDisplayData(from: mockResult)
+    }
+    
+    private func handleTTSCompleteTestMode(testConfig: TestConfiguration) {
+        print("🎆 Setting up TTS complete test mode")
+        isOffline = false
+        isLoading = false
+        isAnalysisTTSReady = true
+        analysisTTSProgress = 1.0
+        
+        // Load mock analysis data
+        let mockResult = testConfig.createMockAnalysisResult()
+        self.analysisResult = mockResult
+        updateDisplayData(from: mockResult)
+        generateKeyMoments(from: mockResult)
+    }
+    
+    private func handleCompletedTestMode(testConfig: TestConfiguration) {
+        print("🎆 Setting up completed test mode")
+        isOffline = false
+        isLoading = false
+        isAnalysisTTSReady = true
+        
+        // Load mock analysis data
+        let mockResult = testConfig.createMockAnalysisResult()
+        self.analysisResult = mockResult
+        updateDisplayData(from: mockResult)
+        generateKeyMoments(from: mockResult)
+        
+        // Simulate connection restore if configured
+        if testConfig.shouldSimulateConnectionRestore {
+            Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+                ToastManager.shared.show("Connected", type: .success, duration: 2.0)
+            }
+        }
+    }
+    
     private func startProcessingSimulation() {
         processingProgress = 0.0
         
@@ -194,8 +323,14 @@ class SwingAnalysisViewModel: ObservableObject {
                 await TTSService.shared.cacheManager.warmCache()
             }
             
+            // Start monitoring TTS cache status for this analysis
+            startTTSCacheMonitoring()
+            
             // Update storage manager with results
             storageManager.updateAnalysisResult(id: self.analysisId ?? "", result: result)
+            
+            // Generate and save complete analysis report with media
+            await self.generateAnalysisReport(result: result)
             
             // Play completion sound
             playCompletionSound()
@@ -396,6 +531,9 @@ class SwingAnalysisViewModel: ObservableObject {
                                 await TTSService.shared.cacheManager.warmCache()
                             }
                             
+                            // Start monitoring TTS cache status
+                            self.startTTSCacheMonitoring()
+                            
                             withAnimation(.liquidGlassSpring) {
                                 self.isLoading = false
                             }
@@ -475,6 +613,173 @@ class SwingAnalysisViewModel: ObservableObject {
         connectivityCancellable?.cancel()
         if let callbackId = connectivityCallbackId {
             connectivityService.removeCallback(callbackId)
+        }
+        ttsCacheCheckTimer?.invalidate()
+        ttsCacheCheckTimer = nil
+    }
+    
+    // MARK: - TTS Cache Monitoring
+    
+    private func startTTSCacheMonitoring() {
+        // Stop any existing timer
+        ttsCacheCheckTimer?.invalidate()
+        
+        // Check immediately
+        Task {
+            await checkAnalysisTTSStatus()
+        }
+        
+        // Then check every 0.5 seconds until ready
+        ttsCacheCheckTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                
+                if self.isAnalysisTTSReady {
+                    self.ttsCacheCheckTimer?.invalidate()
+                    self.ttsCacheCheckTimer = nil
+                    return
+                }
+                
+                await self.checkAnalysisTTSStatus()
+            }
+        }
+    }
+    
+    private func checkAnalysisTTSStatus() async {
+        guard let result = analysisResult else { return }
+        
+        // Parse coaching script into lines
+        let lines = parseCoachingScript(result.coachingScript)
+        
+        // Also check phase feedback phrases
+        var allPhrases: [String] = lines.map { $0.text }
+        for phase in result.swingPhases {
+            allPhrases.append(phase.feedback)
+        }
+        
+        // Check cache status for all phrases
+        var cachedCount = 0
+        for phrase in allPhrases {
+            if await TTSService.shared.cacheManager.getCachedAudio(for: phrase) != nil {
+                cachedCount += 1
+            }
+        }
+        
+        await MainActor.run {
+            self.analysisTTSProgress = Double(cachedCount) / Double(allPhrases.count)
+            self.isAnalysisTTSReady = (cachedCount == allPhrases.count)
+            
+            if self.isAnalysisTTSReady {
+                print("🎬 All TTS phrases cached for analysis")
+            } else {
+                print("🎬 TTS cache progress: \(cachedCount)/\(allPhrases.count)")
+            }
+        }
+    }
+    
+    private func parseCoachingScript(_ script: String) -> [(text: String, startFrameNumber: Int)] {
+        var lines: [(text: String, startFrameNumber: Int)] = []
+        
+        // Split by sentence endings
+        let sentences = script.components(separatedBy: CharacterSet(charactersIn: ".!?"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        
+        // For now, create simple lines without frame numbers
+        // The actual frame numbers would come from more sophisticated parsing
+        for (index, sentence) in sentences.enumerated() {
+            lines.append((
+                text: sentence + ".",
+                startFrameNumber: index * 60 // Placeholder timing
+            ))
+        }
+        
+        return lines
+    }
+    
+    // MARK: - Media Extraction and Report Generation
+    
+    func generateAnalysisReport(result: AnalysisResult) async {
+        guard let analysisId = analysisId,
+              let videoURL = videoURL else { return }
+        
+        do {
+            // Create analysis folder and copy video
+            let newAnalysisId = try mediaStorage.createAnalysisSession(videoURL: videoURL)
+            
+            // Update analysis ID if different
+            if newAnalysisId != analysisId {
+                self.analysisId = newAnalysisId
+            }
+            
+            // Save thumbnail (already generated)
+            if let thumbnail = videoThumbnail {
+                try mediaStorage.saveThumbnail(analysisId: newAnalysisId, image: thumbnail)
+            }
+            
+            // Extract key frames for each swing phase
+            var keyMomentReports: [KeyMomentReport] = []
+            for phase in result.swingPhases {
+                let frameImage = try await mediaStorage.extractFrame(from: videoURL, at: phase.timestamp)
+                let framePath = try mediaStorage.saveKeyFrame(
+                    analysisId: newAnalysisId,
+                    phase: phase.name,
+                    frameNumber: Int(phase.timestamp * 30), // Assuming 30fps
+                    image: frameImage
+                )
+                
+                keyMomentReports.append(KeyMomentReport(
+                    phase: phase.name,
+                    timestamp: phase.timestamp,
+                    framePath: framePath,
+                    feedback: phase.feedback
+                ))
+            }
+            
+            // Parse coaching script and save TTS files
+            let coachingLines = parseCoachingScript(result.coachingScript)
+            var coachingLineReports: [CoachingLineReport] = []
+            
+            for (index, line) in coachingLines.enumerated() {
+                // Check if TTS is already cached
+                if let audioData = await TTSService.shared.cacheManager.getCachedAudio(for: line.text) {
+                    let ttsPath = try mediaStorage.saveTTSAudio(
+                        analysisId: newAnalysisId,
+                        lineIndex: index,
+                        audioData: audioData
+                    )
+                    
+                    coachingLineReports.append(CoachingLineReport(
+                        text: line.text,
+                        startFrame: line.startFrameNumber,
+                        ttsPath: ttsPath
+                    ))
+                }
+            }
+            
+            // Create and save the complete report
+            let report = AnalysisReport(
+                id: newAnalysisId,
+                createdAt: Date(),
+                videoPath: "video.mp4",
+                thumbnailPath: "thumbnail.jpg",
+                overallScore: result.balance,
+                avgHeadSpeed: "\(result.swingSpeed) mph",
+                topCompliment: result.keyPoints.first ?? "Great swing!",
+                topCritique: result.keyPoints.count > 1 ? result.keyPoints[1] : "Keep practicing",
+                summary: result.overallAnalysis,
+                keyMoments: keyMomentReports,
+                coachingScript: coachingLineReports
+            )
+            
+            // Save analysis JSON and report
+            try mediaStorage.saveAnalysisJSON(analysisId: newAnalysisId, analysisResult: result)
+            try mediaStorage.saveAnalysisReport(analysisId: newAnalysisId, report: report)
+            
+            print("📁 Analysis report saved to: \(newAnalysisId)")
+            
+        } catch {
+            print("❌ Error generating analysis report: \(error)")
         }
     }
 }
