@@ -39,6 +39,10 @@ class SwingDetectionSession:
         self.last_confidence: Optional[float] = None
         self.cooldown_until: Optional[float] = None
         self.swings_detected: int = 0
+        self.is_analyzing: bool = False
+        self.analysis_start_time: Optional[float] = None
+        self.analysis_task: Optional[asyncio.Task] = None
+        self.analysis_result: Optional[Dict[str, Any]] = None
         
         # Get dependencies from container
         self.vision_model = container.get(VisionModel)
@@ -115,25 +119,36 @@ class SwingDetectionSession:
     
     async def analyze_for_swing(self) -> Dict[str, Any]:
         """Analyze image sequence for golf swing using vision model"""
-        if not self.image_buffer:
+        # Take a snapshot of current buffer for analysis
+        # This allows us to continue collecting frames while analyzing
+        snapshot_buffer = self.image_buffer.copy()
+        
+        if not snapshot_buffer:
             return {
                 "swing_detected": False,
                 "reason": "No images in buffer"
             }
         
         try:
-            # Prepare PIL images
+            # Prepare PIL images from snapshot
             pil_images = []
             
-            for img_data in self.image_buffer:
-                # Images are already resized and compressed by resize_and_compress_image
+            for img_data in snapshot_buffer:
+                # Images are already resized and compressed by client
                 # Just decode for analysis
                 image_bytes = base64.b64decode(img_data["image"])
                 image = Image.open(BytesIO(image_bytes))
                 pil_images.append(image)
             
+            # Time the LLM call
+            start_time = datetime.now()
+            
             # Use vision model to analyze
             result = await self.vision_model.analyze_images(pil_images, self.swing_prompt)
+            
+            # Calculate response time
+            response_time = (datetime.now() - start_time).total_seconds()
+            logger.info(f"🕐 LLM response time: {response_time:.2f}s")
             
             # Store confidence for later use
             self.last_confidence = result.get("confidence", 0.0)
@@ -270,6 +285,7 @@ async def detect_golf_swing_websocket(websocket: WebSocket):
             
             # Add image to buffer (using client-processed image)
             session.add_image(float(timestamp), image_base64)
+            logger.debug(f"Added frame at {timestamp}s, buffer size: {len(session.image_buffer)}, first: {session.first_timestamp}, last: {session.last_timestamp}")
             
             # Check if we're in cooldown period
             current_time = float(timestamp)
@@ -291,11 +307,27 @@ async def detect_golf_swing_websocket(websocket: WebSocket):
             # Get context info
             context_info = session.get_context_info()
             
-            # Check if we should submit to LLM
-            if session.should_submit_to_llm():
-                logger.info(f"🔍 Submitting to LLM - context window: {context_info['context_window']:.2f}s, buffer size: {len(session.image_buffer)} frames")
-                # Analyze for swing
-                result = await session.analyze_for_swing()
+            # Check if currently analyzing
+            if session.is_analyzing:
+                # Send analyzing status while LLM is processing
+                elapsed = datetime.now().timestamp() - session.analysis_start_time if session.analysis_start_time else 0
+                logger.debug(f"⏳ Currently analyzing, elapsed: {elapsed:.2f}s")
+                response = {
+                    "status": "analyzing",
+                    "message": "Processing swing detection...",
+                    "elapsed_time": elapsed,
+                    "context_window": context_info["context_window"],
+                    "buffer_size": len(session.image_buffer)
+                }
+                await websocket.send_json(response)
+                continue
+            
+            # Check if there's a completed analysis to process
+            if session.analysis_task and session.analysis_task.done():
+                # Get the result
+                result = session.analysis_result
+                session.analysis_task = None
+                session.analysis_result = None
                 
                 confidence = result.get("confidence", 0.0)
                 swing_detected = result.get("swing_detected", False)
@@ -303,14 +335,16 @@ async def detect_golf_swing_websocket(websocket: WebSocket):
                 # Check if confidence meets threshold
                 if swing_detected and confidence >= confidence_threshold:
                     session.swings_detected += 1
-                    logger.info(f"🏌️ SWING {session.swings_detected} DETECTED at {timestamp:.2f}s (confidence: {confidence:.2f})")
+                    # Use the timestamp from when analysis was triggered
+                    detection_timestamp = session.last_timestamp if session.last_timestamp else timestamp
+                    logger.info(f"🏌️ SWING {session.swings_detected} DETECTED at {detection_timestamp:.2f}s (confidence: {confidence:.2f})")
                     
                     # Send detection response
                     response = {
                         "status": "evaluated",
                         "swing_detected": True,
                         "confidence": confidence,
-                        "timestamp": timestamp,
+                        "timestamp": detection_timestamp,
                         "context_window": context_info["context_window"],
                         "context_size": context_info["context_size"],
                         "total_swings": session.swings_detected
@@ -319,32 +353,64 @@ async def detect_golf_swing_websocket(websocket: WebSocket):
                     
                     # Clear context for next swing
                     session.clear_context()
-                    session.cooldown_until = timestamp + cooldown
+                    session.cooldown_until = detection_timestamp + cooldown
+                    session.is_analyzing = False
+                    session.analysis_start_time = None
                 else:
                     # Continue collecting data
-                    if context_info["context_window"] > 0:
-                        logger.debug(f"🔄 Continuing to collect data - window: {context_info['context_window']:.2f}s, frames: {len(session.image_buffer)}")
+                    session.is_analyzing = False
+                    session.analysis_start_time = None
+                    if swing_detected and confidence < confidence_threshold:
+                        logger.info(f"❌ Low confidence swing rejected: {confidence} < {confidence_threshold}")
+                    # Don't send response here, let it continue to next check
+            
+            # Check if we should submit to LLM (and not already analyzing)
+            elif session.should_submit_to_llm() and not session.is_analyzing:
+                logger.info(f"🔍 Submitting to LLM - context window: {context_info['context_window']:.2f}s, buffer size: {len(session.image_buffer)} frames")
+                
+                # Mark as analyzing BEFORE creating the task
+                session.is_analyzing = True
+                session.analysis_start_time = datetime.now().timestamp()
+                
+                # Create background task for analysis
+                async def analyze_and_store():
+                    result = await session.analyze_for_swing()
+                    session.analysis_result = result
+                
+                # Start analysis in background
+                session.analysis_task = asyncio.create_task(analyze_and_store())
+                
+                # Send analyzing status
+                response = {
+                    "status": "analyzing",
+                    "message": "Processing swing detection...",
+                    "elapsed_time": 0,
+                    "context_window": context_info["context_window"],
+                    "buffer_size": len(session.image_buffer)
+                }
+                await websocket.send_json(response)
+            else:
+                # Not enough data yet or still analyzing
+                if session.is_analyzing:
+                    # Still analyzing, send status
+                    elapsed = datetime.now().timestamp() - session.analysis_start_time if session.analysis_start_time else 0
+                    response = {
+                        "status": "analyzing", 
+                        "message": "Processing swing detection...",
+                        "elapsed_time": elapsed,
+                        "context_window": context_info["context_window"],
+                        "buffer_size": len(session.image_buffer)
+                    }
+                else:
+                    # Not enough data yet
+                    time_needed = submission_threshold - context_info["context_window"]
+                    if len(session.image_buffer) % 5 == 1:  # Log every 5th frame to reduce noise
+                        logger.debug(f"⏳ Need {time_needed:.2f}s more data before analysis (current window: {context_info['context_window']:.2f}s)")
                     response = {
                         "status": "awaiting_more_data",
-                        "swing_detected": False,
-                        "confidence": confidence if swing_detected else 0.0,
                         "context_window": context_info["context_window"],
                         "context_size": context_info["context_size"]
                     }
-                    await websocket.send_json(response)
-                    
-                    if swing_detected and confidence < confidence_threshold:
-                        logger.info(f"❌ Low confidence swing rejected: {confidence} < {confidence_threshold}")
-            else:
-                # Not enough data yet
-                time_needed = submission_threshold - context_info["context_window"]
-                if len(session.image_buffer) % 5 == 1:  # Log every 5th frame to reduce noise
-                    logger.debug(f"⏳ Need {time_needed:.2f}s more data before analysis (current window: {context_info['context_window']:.2f}s)")
-                response = {
-                    "status": "awaiting_more_data", 
-                    "context_window": context_info["context_window"],
-                    "context_size": context_info["context_size"]
-                }
                 await websocket.send_json(response)
     
     except WebSocketDisconnect:

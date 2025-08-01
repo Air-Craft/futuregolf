@@ -33,7 +33,7 @@ struct Config {
     static let targetSwingCount = 3
     
     /// Frame capture interval for swing detection (in seconds)
-    static let stillCaptureInterval: TimeInterval = 0.5
+    static let stillCaptureInterval: TimeInterval = 0.2
     
     /// Post-detection cooldown period (in seconds)
     static let postDetectionCooldown: TimeInterval = 2.0

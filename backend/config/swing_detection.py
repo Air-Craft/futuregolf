@@ -12,14 +12,14 @@ load_dotenv()
 LLM_MODEL = os.getenv("SWING_DETECTION_LLM_MODEL", "gemini/gemini-1.5-flash-002")
 
 # Timing thresholds (in seconds)
-LLM_SUBMISSION_THRESHOLD = float(os.getenv("LLM_SUBMISSION_THRESHOLD", "2.0"))
+LLM_SUBMISSION_THRESHOLD = float(os.getenv("LLM_SUBMISSION_THRESHOLD", "1.0"))
 CONTEXT_EXPIRY_SECONDS = float(os.getenv("CONTEXT_EXPIRY_SECONDS", "5.0"))
 
 # Buffer limits
 MAX_IMAGE_BUFFER = int(os.getenv("MAX_IMAGE_BUFFER", "100"))
 
 # Frame rate from iOS app (for testing)
-IOS_FRAME_INTERVAL = float(os.getenv("IOS_FRAME_INTERVAL", "0.5"))
+IOS_FRAME_INTERVAL = float(os.getenv("IOS_FRAME_INTERVAL", "0.2"))
 
 # Image processing settings
 IMAGE_MAX_SIZE = (128, 128)  # Target box size for resizing images (maintains aspect ratio)

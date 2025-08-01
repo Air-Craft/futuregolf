@@ -40,6 +40,13 @@
 			);
 			target = 37361DEC2E33FCCA00909D7E /* FutureGolfTests */;
 		};
+		D34969642E3D2598001D0B00 /* Exceptions for "FutureGolf" folder in "FutureGolf" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 37361DDF2E33FCC900909D7E /* FutureGolf */;
+		};
 		D3AF1B3A2E38E86B0024673F /* Exceptions for "FutureGolf" folder in "FutureGolfTests" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -60,6 +67,7 @@
 		37361DE22E33FCC900909D7E /* FutureGolf */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				D34969642E3D2598001D0B00 /* Exceptions for "FutureGolf" folder in "FutureGolf" target */,
 				D3AF1B3A2E38E86B0024673F /* Exceptions for "FutureGolf" folder in "FutureGolfTests" target */,
 				D3AF1B3B2E38E86B0024673F /* Exceptions for "FutureGolf" folder in "FutureGolfUITests" target */,
 			);
