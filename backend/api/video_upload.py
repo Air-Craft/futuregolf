@@ -2,7 +2,7 @@
 FastAPI endpoints for video upload and management using Google Cloud Storage.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 from typing import Optional, List
@@ -11,6 +11,7 @@ import logging
 from database.config import get_db
 from models.video import Video, VideoStatus
 from services.storage_service import get_storage_service
+from services.video_analysis_service import get_clean_video_analysis_service
 from config.storage import storage_config
 
 router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 @router.post("/upload", response_model=dict)
 async def upload_video(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     title: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
@@ -73,10 +75,25 @@ async def upload_video(
         if upload_result["success"]:
             # Update video record with storage info
             video.video_url = upload_result["public_url"]
+            video.video_blob_name = upload_result.get("blob_name", upload_result["public_url"].split("/")[-1])
             video.mark_as_uploaded()
             
             db.commit()
             db.refresh(video)
+            
+            # Auto-trigger background analysis using the clean analysis service
+            logger.info(f"Auto-triggering background analysis for video_id={video.id}")
+            try:
+                analysis_service = get_clean_video_analysis_service()
+                background_tasks.add_task(
+                    analysis_service.analyze_video_from_storage,
+                    video.id,
+                    user_id
+                )
+                logger.info(f"Background analysis task queued for video_id={video.id}")
+            except Exception as e:
+                logger.error(f"Failed to queue background analysis for video_id={video.id}: {e}")
+                # Don't fail the upload if analysis queueing fails
             
             return {
                 "success": True,
@@ -84,6 +101,7 @@ async def upload_video(
                 "video_url": video.video_url,
                 "file_size": video.file_size,
                 "status": video.status.value,
+                "analysis_status": "queued",
                 "upload_result": upload_result
             }
         else:

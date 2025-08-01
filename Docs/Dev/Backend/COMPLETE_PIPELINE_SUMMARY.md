@@ -1,8 +1,10 @@
 # FutureGolf Complete Video Processing Pipeline
 
-## Overview
+> **🚀 ARCHITECTURE UPDATED (Jan 2025):** This document describes the legacy complex pipeline. The new clean architecture is documented in [VIDEO_ANALYSIS_CLEAN_ARCHITECTURE.md](VIDEO_ANALYSIS_CLEAN_ARCHITECTURE.md). The new system is simpler, more reliable, and uses the same logic as the working `analyze_video.py` CLI tool.
 
-I have successfully created and tested a complete video processing pipeline that integrates all components of the FutureGolf video analysis system. The pipeline processes golf swing videos through multiple AI services and stores comprehensive results in the database.
+## Legacy Overview (Deprecated)
+
+This describes the old complex video processing pipeline that has been replaced with a cleaner architecture.
 
 ## Architecture Summary
 

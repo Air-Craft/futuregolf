@@ -2,7 +2,44 @@
 
 This document summarizes the recent updates made to the FutureGolf application.
 
-## Date: 2025-08-01
+## Date: 2025-08-01 - MAJOR ARCHITECTURE REFACTOR ✨
+
+### Video Analysis Pipeline - Complete Rewrite
+
+**🚨 BREAKING CHANGE:** Complete architectural refactor of the video analysis system for simplicity and reliability.
+
+**Problem:** The original system was overly complex, different from the working CLI tool (`analyze_video.py`), and causing upload stalling issues.
+
+**Solution:** Clean architecture that works exactly like the proven `analyze_video.py` CLI tool.
+
+#### Key Changes:
+- ✅ **New Clean Service**: `video_analysis_service.py` mirrors CLI logic exactly
+- ✅ **Auto-Background Processing**: Upload triggers analysis automatically via `BackgroundTasks`
+- ✅ **Simplified API**: Single polling endpoint, same JSON format as CLI
+- ✅ **Removed Complexity**: Deleted pose analysis, separate coaching generation
+- ✅ **Enhanced Upload**: Auto-triggers analysis, no manual triggering needed
+
+#### New Workflow:
+```
+Upload → Auto-Analysis → Poll Results (same JSON as CLI)
+```
+
+#### Files Modified:
+- ✅ `backend/services/video_analysis_service.py` - New clean implementation
+- ✅ `backend/api/video_analysis.py` - Simplified polling API  
+- ✅ `backend/api/video_upload.py` - Auto-trigger integration
+
+#### Files Removed:
+- ❌ `pose_analysis_service.py`, `test_pose_analysis.py` (unused complexity)
+- 📦 Legacy files backed up with `.bak` extension
+
+**Impact:** Upload stalling resolved, consistent CLI behavior, simplified maintenance.
+
+See: `Docs/Dev/Backend/VIDEO_ANALYSIS_CLEAN_ARCHITECTURE.md` for complete details.
+
+---
+
+## Previous Updates - 2025-08-01
 
 ### iOS App Updates
 

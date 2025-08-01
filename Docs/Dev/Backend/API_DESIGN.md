@@ -1,5 +1,7 @@
 # Backend API Design
 
+> **🚀 MAJOR UPDATE (Jan 2025):** Video Analysis API has been completely refactored for simplicity and reliability. The new architecture uses automatic background processing and simplified polling. See [VIDEO_ANALYSIS_CLEAN_ARCHITECTURE.md](VIDEO_ANALYSIS_CLEAN_ARCHITECTURE.md) for complete details.
+
 ## Core Endpoints
 
 ### Authentication
@@ -14,11 +16,17 @@
 - `GET /api/v1/videos/{id}` - Get video metadata
 - `DELETE /api/v1/videos/{id}` - Delete video
 
-### Video Analysis
-- `POST /api/v1/video-analysis/{video_id}` - Start analysis process
-- `GET /api/v1/video-analysis/{analysis_id}/status` - Poll analysis progress
-- `GET /api/v1/video-analysis/{analysis_id}` - Get completed analysis results
+### Video Analysis (NEW SIMPLIFIED API)
+- `GET /api/v1/video-analysis/video/{video_id}` - **Main polling endpoint** - Get analysis results 
+- `GET /api/v1/video-analysis/status/{video_id}` - Lightweight status check
 - `GET /api/v1/video-analysis/user/analyses` - Get user's analysis history
+- `DELETE /api/v1/video-analysis/analysis/{analysis_id}` - Delete analysis
+
+**📋 Key Changes:**
+- ✅ **Auto-trigger**: Video upload automatically starts analysis (no manual trigger needed)
+- ✅ **Simplified polling**: Single endpoint returns status OR full results
+- ✅ **Same JSON format**: Returns identical structure as `analyze_video.py` CLI tool
+- ❌ **Removed**: Manual analysis triggering, complex status endpoints, pose analysis
 
 ### Text-to-Speech
 - `POST /api/v1/tts/generate` - Generate TTS audio from text
