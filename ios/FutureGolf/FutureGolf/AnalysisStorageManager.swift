@@ -35,14 +35,12 @@ struct StoredAnalysis: Codable, Identifiable {
 // MARK: - Analysis Storage Manager
 @MainActor
 class AnalysisStorageManager: ObservableObject {
-    static let shared = AnalysisStorageManager()
-    
     @Published var storedAnalyses: [StoredAnalysis] = []
     
     private let documentsDirectory: URL
     private let storageFileName = "stored_analyses.json"
     
-    private init() {
+    init() {
         documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         loadAnalyses()
     }

@@ -23,7 +23,7 @@ class OnDeviceSTTService: NSObject, ObservableObject {
     private let startCommandPatterns = [
         "begin",
         "start",
-        "i'm ready",
+        "ready",
         "let's go",
         "do it",
         "record",
@@ -36,9 +36,10 @@ class OnDeviceSTTService: NSObject, ObservableObject {
         "done",
         "cancel",
         "abort",
+        "end",
         "that's enough",
-        "end recording",
-        "stop recording"
+        "I've had enough",
+        "that is enough"
     ]
     
     private override init() {

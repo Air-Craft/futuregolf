@@ -16,6 +16,11 @@ class SwingAnalysisViewModel: ObservableObject {
     var videoThumbnail: UIImage?
     var keyMoments: [KeyMoment] = []
     
+    // Thumbnail State
+    var isThumbnailLoading = false
+    var thumbnailLoadingProgress: Double = 0.0
+    var thumbnailErrorMessage: String?
+    
     // Display Data
     var overallScore: String = "--"
     var avgHeadSpeed: String = "-- mph"
@@ -36,16 +41,29 @@ class SwingAnalysisViewModel: ObservableObject {
     var analysisTTSProgress: Double = 0.0
     private var ttsCacheCheckTimer: Timer?
     
+    // Dependencies - will be injected
+    weak var dependencies: AppDependencies?
+    
     private let apiClient = APIClient()
     private var progressTimer: Timer?
     var videoURL: URL?
-    private let storageManager = AnalysisStorageManager.shared
     private let mediaStorage = AnalysisMediaStorage.shared
-    private let connectivityService = ConnectivityService.shared
-    private let processingService = VideoProcessingService.shared
     private var analysisId: String?
     private var connectivityCallbackId: UUID?
     private var connectivityCancellable: AnyCancellable?
+    
+    // Computed properties for services
+    private var storageManager: AnalysisStorageManager? {
+        dependencies?.analysisStorage
+    }
+    
+    private var connectivityService: ConnectivityService? {
+        dependencies?.connectivity
+    }
+    
+    private var processingService: VideoProcessingService? {
+        dependencies?.videoProcessing
+    }
     
     func startNewAnalysis(videoURL: URL) {
         print("🎆 SwingAnalysisViewModel: startNewAnalysis called")
@@ -62,19 +80,20 @@ class SwingAnalysisViewModel: ObservableObject {
         }
         
         // Create analysis record
-        self.analysisId = storageManager.saveAnalysis(videoURL: videoURL, status: .pending)
+        self.analysisId = storageManager?.saveAnalysis(videoURL: videoURL, status: .pending)
         print("🎆 Created analysis ID: \(self.analysisId ?? "nil")")
         
-        // Generate thumbnail asynchronously
+        // Generate thumbnail asynchronously (this should work even offline)
         Task {
             await generateThumbnailAsync(from: videoURL)
+            print("🎬 Thumbnail generation completed. Thumbnail: \(self.videoThumbnail != nil ? "✅ Generated" : "❌ Failed")")
         }
         
         // Set up connectivity monitoring
         setupConnectivityMonitoring()
         
         // Check connectivity
-        let isConnected = connectivityService.isConnected
+        let isConnected = connectivityService?.isConnected ?? false
         print("🎆 Connectivity status: \(isConnected)")
         
         if !isConnected {
@@ -119,7 +138,7 @@ class SwingAnalysisViewModel: ObservableObject {
         
         // Load from local storage
         Task {
-            if let storedAnalysis = storageManager.getAnalysis(id: id) {
+            if let storedAnalysis = storageManager?.getAnalysis(id: id) {
                 print("🎆 Found stored analysis with status: \(storedAnalysis.status)")
                 self.videoURL = storedAnalysis.videoURL
                 
@@ -139,7 +158,7 @@ class SwingAnalysisViewModel: ObservableObject {
                     
                 case .pending, .failed:
                     // Check connectivity and retry
-                    if connectivityService.isConnected {
+                    if connectivityService?.isConnected ?? false {
                         startProcessingSimulation()
                         Task {
                             await retryAnalysis(storedAnalysis)
@@ -298,7 +317,7 @@ class SwingAnalysisViewModel: ObservableObject {
         do {
             // Update status to uploading
             if let id = self.analysisId {
-                storageManager.updateStatus(id: id, status: .uploading)
+                storageManager?.updateStatus(id: id, status: .uploading)
             }
             
             // Upload video
@@ -327,7 +346,7 @@ class SwingAnalysisViewModel: ObservableObject {
             startTTSCacheMonitoring()
             
             // Update storage manager with results
-            storageManager.updateAnalysisResult(id: self.analysisId ?? "", result: result)
+            storageManager?.updateAnalysisResult(id: self.analysisId ?? "", result: result)
             
             // Generate and save complete analysis report with media
             await self.generateAnalysisReport(result: result)
@@ -470,33 +489,181 @@ class SwingAnalysisViewModel: ObservableObject {
     }
     
     private func generateThumbnailAsync(from url: URL) async {
-        // Get video duration and use midway point
+        print("🎬 THUMBNAIL: Starting generation for: \(url.lastPathComponent)")
+        print("🎬 THUMBNAIL: Full path: \(url.path)")
+        
+        // Set initial loading state
+        await MainActor.run {
+            self.isThumbnailLoading = true
+            self.thumbnailLoadingProgress = 0.0
+            self.thumbnailErrorMessage = nil
+        }
+        
+        // Phase 1: Validate video file access
+        await MainActor.run {
+            self.thumbnailLoadingProgress = 0.1
+        }
+        
+        guard await validateVideoFile(url: url) else {
+            print("🎬 THUMBNAIL: ❌ Video file validation failed")
+            await setThumbnailGenerationFailed(reason: "Video file not accessible")
+            return
+        }
+        
+        await MainActor.run {
+            self.thumbnailLoadingProgress = 0.3
+        }
+        
+        // Phase 2: Attempt thumbnail generation with retry logic
+        let maxRetries = 3
+        var attempt = 0
+        
+        while attempt < maxRetries {
+            attempt += 1
+            print("🎬 THUMBNAIL: Attempt \(attempt)/\(maxRetries)")
+            
+            await MainActor.run {
+                self.thumbnailLoadingProgress = 0.3 + (Double(attempt) / Double(maxRetries)) * 0.6
+            }
+            
+            if let thumbnail = await attemptThumbnailGeneration(from: url, attempt: attempt) {
+                await MainActor.run {
+                    self.videoThumbnail = thumbnail
+                    self.isThumbnailLoading = false
+                    self.thumbnailLoadingProgress = 1.0
+                    self.thumbnailErrorMessage = nil
+                    print("🎬 THUMBNAIL: ✅ Success on attempt \(attempt)")
+                    
+                    // Save thumbnail to storage
+                    if let analysisId = self.analysisId {
+                        storageManager?.updateThumbnail(id: analysisId, thumbnail: thumbnail)
+                    }
+                }
+                return
+            }
+            
+            // Wait before retry (exponential backoff)
+            if attempt < maxRetries {
+                let delay = UInt64(pow(2.0, Double(attempt)) * 500_000_000) // 0.5s, 1s, 2s
+                print("🎬 THUMBNAIL: Waiting \(delay/1_000_000_000)s before retry...")
+                try? await Task.sleep(nanoseconds: delay)
+            }
+        }
+        
+        print("🎬 THUMBNAIL: ❌ All attempts failed - no thumbnail available")
+        await setThumbnailGenerationFailed(reason: "Thumbnail generation failed after \(maxRetries) attempts")
+    }
+    
+    private func validateVideoFile(url: URL) async -> Bool {
+        print("🎬 VALIDATE: Checking video file at: \(url.path)")
+        
+        // Check if file exists
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            print("🎬 VALIDATE: ❌ File does not exist")
+            return false
+        }
+        
+        // Check file size
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            let fileSize = attributes[.size] as? Int64 ?? 0
+            print("🎬 VALIDATE: File size: \(fileSize) bytes")
+            
+            if fileSize == 0 {
+                print("🎬 VALIDATE: ❌ File is empty")
+                return false
+            }
+            
+            if fileSize < 1024 { // Less than 1KB is suspicious for a video
+                print("🎬 VALIDATE: ⚠️ File very small (\(fileSize) bytes), may not be a valid video")
+            }
+        } catch {
+            print("🎬 VALIDATE: ⚠️ Could not get file attributes: \(error)")
+        }
+        
+        // Check if file is readable
+        guard FileManager.default.isReadableFile(atPath: url.path) else {
+            print("🎬 VALIDATE: ❌ File is not readable")
+            return false
+        }
+        
+        // Basic AVAsset validation
         let asset = AVURLAsset(url: url)
+        do {
+            let tracks = try await asset.load(.tracks)
+            let videoTracks = tracks.filter { $0.mediaType == .video }
+            
+            if videoTracks.isEmpty {
+                print("🎬 VALIDATE: ❌ No video tracks found")
+                return false
+            }
+            
+            print("🎬 VALIDATE: ✅ Found \(videoTracks.count) video track(s)")
+            return true
+            
+        } catch {
+            print("🎬 VALIDATE: ❌ AVAsset validation failed: \(error)")
+            return false
+        }
+    }
+    
+    private func attemptThumbnailGeneration(from url: URL, attempt: Int) async -> UIImage? {
+        print("🎬 GENERATE: Attempt \(attempt) - creating AVURLAsset")
+        let asset = AVURLAsset(url: url)
+        
+        // Try different time positions based on attempt
+        var timePositions: [Double] = []
         
         do {
             let duration = try await asset.load(.duration)
             let durationSeconds = CMTimeGetSeconds(duration)
-            let midwayTime = durationSeconds / 2.0
+            print("🎬 GENERATE: Video duration: \(durationSeconds)s")
             
-            print("🎬 Generating thumbnail from midway point: \(midwayTime)s of \(durationSeconds)s")
-            if let thumbnail = await generateThumbnailAsync(from: url, at: midwayTime) {
-                await MainActor.run {
-                    self.videoThumbnail = thumbnail
-                    
-                    // Also save thumbnail to storage
-                    if let analysisId = self.analysisId {
-                        storageManager.updateThumbnail(id: analysisId, thumbnail: thumbnail)
-                    }
+            if durationSeconds > 0 {
+                switch attempt {
+                case 1:
+                    // First attempt: midway point
+                    timePositions = [durationSeconds / 2.0]
+                case 2:
+                    // Second attempt: quarter and three-quarter points
+                    timePositions = [durationSeconds / 4.0, durationSeconds * 3.0 / 4.0]
+                default:
+                    // Final attempt: multiple positions including start
+                    timePositions = [0.0, durationSeconds / 8.0, durationSeconds / 4.0]
                 }
+            } else {
+                print("🎬 GENERATE: ⚠️ Invalid duration, using time 0")
+                timePositions = [0.0]
             }
         } catch {
-            // Fallback to first frame
-            print("🎬 Error getting duration, using first frame")
-            if let thumbnail = await generateThumbnailAsync(from: url, at: 0) {
-                await MainActor.run {
-                    self.videoThumbnail = thumbnail
-                }
+            print("🎬 GENERATE: ⚠️ Could not get duration: \(error), using time 0")
+            timePositions = [0.0]
+        }
+        
+        // Try each time position
+        for timePosition in timePositions {
+            print("🎬 GENERATE: Trying time position: \(timePosition)s")
+            
+            if let thumbnail = await generateThumbnailAsync(from: url, at: timePosition) {
+                print("🎬 GENERATE: ✅ Generated thumbnail at \(timePosition)s")
+                return thumbnail
+            } else {
+                print("🎬 GENERATE: ❌ Failed at \(timePosition)s")
             }
+        }
+        
+        return nil
+    }
+    
+    private func setThumbnailGenerationFailed(reason: String) async {
+        await MainActor.run {
+            self.isThumbnailLoading = false
+            self.thumbnailLoadingProgress = 0.0
+            self.thumbnailErrorMessage = reason
+            
+            // Don't set videoThumbnail to nil if it already has a value
+            // This preserves any existing thumbnail from previous attempts
+            print("🎬 FAILED: \(reason)")
         }
     }
     
@@ -517,7 +684,7 @@ class SwingAnalysisViewModel: ObservableObject {
         // Monitor the analysis progress
         Task {
             while isLoading {
-                if let analysis = storageManager.getAnalysis(id: id) {
+                if let analysis = storageManager?.getAnalysis(id: id) {
                     switch analysis.status {
                     case .completed:
                         if let result = analysis.analysisResult {
@@ -572,7 +739,7 @@ class SwingAnalysisViewModel: ObservableObject {
     
     private func setupConnectivityMonitoring() {
         // Monitor connectivity changes
-        connectivityCancellable = connectivityService.$isConnected
+        connectivityCancellable = connectivityService?.$isConnected
             .removeDuplicates()
             .sink { [weak self] isConnected in
                 guard let self = self else { return }
@@ -588,7 +755,7 @@ class SwingAnalysisViewModel: ObservableObject {
                         
                         // If we have a pending analysis, start processing
                         if let analysisId = self.analysisId,
-                           let analysis = self.storageManager.getAnalysis(id: analysisId),
+                           let analysis = self.storageManager?.getAnalysis(id: analysisId),
                            (analysis.status == .pending || analysis.status == .failed) {
                             self.startProcessingSimulation()
                             Task {
@@ -612,7 +779,7 @@ class SwingAnalysisViewModel: ObservableObject {
     func cleanup() {
         connectivityCancellable?.cancel()
         if let callbackId = connectivityCallbackId {
-            connectivityService.removeCallback(callbackId)
+            connectivityService?.removeCallback(callbackId)
         }
         ttsCacheCheckTimer?.invalidate()
         ttsCacheCheckTimer = nil

@@ -11,9 +11,7 @@ private enum Spacing {
 }
 
 struct SwingAnalysisView: View {
-    let videoURL: URL
-    let analysisId: String?
-    
+    @EnvironmentObject var deps: AppDependencies
     @StateObject private var viewModel = SwingAnalysisViewModel()
     @State private var showVideoPlayer = false
     @State private var expandedSection = false
@@ -22,6 +20,15 @@ struct SwingAnalysisView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    
+    // For UI testing compatibility
+    let overrideVideoURL: URL?
+    let overrideAnalysisId: String?
+    
+    init(videoURL: URL? = nil, analysisId: String? = nil) {
+        self.overrideVideoURL = videoURL
+        self.overrideAnalysisId = analysisId
+    }
     
     var body: some View {
         NavigationStack {
@@ -77,8 +84,21 @@ struct SwingAnalysisView: View {
             }
             .onAppear {
                 print("🎬 SwingAnalysisView: onAppear triggered")
-                print("🎬 videoURL: \(videoURL)")
+                
+                // Use override values for UI testing, otherwise use global state
+                let videoURL = overrideVideoURL ?? deps.currentRecordingURL
+                let analysisId = overrideAnalysisId ?? deps.currentRecordingId
+                
+                print("🎬 videoURL: \(videoURL?.absoluteString ?? "nil")")
                 print("🎬 analysisId: \(analysisId ?? "nil")")
+                
+                guard let videoURL = videoURL else {
+                    assertionFailure("SwingAnalysisView presented without video URL")
+                    return
+                }
+                
+                // Pass dependencies to view model
+                viewModel.dependencies = deps
                 
                 // Always proceed - let the view model handle connectivity
                 if let id = analysisId {
@@ -107,7 +127,7 @@ struct SwingAnalysisView: View {
                     NavigationStack {
                         VideoPlayerWithCoaching(
                             analysisResult: result,
-                            videoURL: videoURL
+                            videoURL: overrideVideoURL ?? deps.currentRecordingURL ?? viewModel.videoURL ?? URL(fileURLWithPath: "")
                         )
                         .toolbar {
                             ToolbarItem(placement: .navigationBarTrailing) {
@@ -156,28 +176,73 @@ struct SwingAnalysisView: View {
     // MARK: - Offline View
     private var offlineView: some View {
         VStack(spacing: Spacing.extraLarge) {
-            // Video Thumbnail with busy indicator
+            // Video Thumbnail with loading/error states
             ZStack {
                 if let thumbnail = viewModel.videoThumbnail {
                     Image(uiImage: thumbnail)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(height: videoThumbnailHeight)
+                } else if viewModel.isThumbnailLoading {
+                    // Thumbnail loading state
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.2)
+                        
+                        if viewModel.thumbnailLoadingProgress > 0 {
+                            ProgressView(value: viewModel.thumbnailLoadingProgress)
+                                .tint(.white)
+                                .scaleEffect(y: 1.5)
+                                .frame(width: 120)
+                        }
+                        
+                        Text("Loading thumbnail...")
+                            .font(.caption)
+                            .foregroundColor(.white)
+                    }
+                    .frame(height: videoThumbnailHeight)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(8)
+                } else if let errorMessage = viewModel.thumbnailErrorMessage {
+                    // Thumbnail error state
+                    VStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.title2)
+                            .foregroundColor(.orange)
+                        
+                        Text("Thumbnail unavailable")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                        
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(height: videoThumbnailHeight)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
                 } else {
+                    // Default loading state
                     Rectangle()
                         .fill(Color.gray.opacity(0.3))
                         .frame(height: videoThumbnailHeight)
                 }
                 
-                // Always show busy indicator when offline
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .scaleEffect(1.5)
-                    .background(
-                        Circle()
-                            .fill(Color.black.opacity(0.6))
-                            .frame(width: 60, height: 60)
-                    )
+                // Always show busy indicator when offline (analysis processing)
+                if viewModel.isOffline {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+                        .background(
+                            Circle()
+                                .fill(Color.black.opacity(0.6))
+                                .frame(width: 60, height: 60)
+                        )
+                }
             }
             .padding(.horizontal)
             
@@ -258,44 +323,88 @@ struct SwingAnalysisView: View {
     // MARK: - Processing View
     private var processingView: some View {
         VStack(spacing: Spacing.extraLarge) {
-            // Video Thumbnail with busy indicator or play button
+            // Video Thumbnail with loading/error states and overlays
             ZStack {
                 if let thumbnail = viewModel.videoThumbnail {
                     Image(uiImage: thumbnail)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(height: videoThumbnailHeight)
+                } else if viewModel.isThumbnailLoading {
+                    // Thumbnail loading state
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.2)
+                        
+                        if viewModel.thumbnailLoadingProgress > 0 {
+                            ProgressView(value: viewModel.thumbnailLoadingProgress)
+                                .tint(.white)
+                                .scaleEffect(y: 1.5)
+                                .frame(width: 120)
+                        }
+                        
+                        Text("Loading thumbnail...")
+                            .font(.caption)
+                            .foregroundColor(.white)
+                    }
+                    .frame(height: videoThumbnailHeight)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(8)
+                } else if let errorMessage = viewModel.thumbnailErrorMessage {
+                    // Thumbnail error state
+                    VStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.title2)
+                            .foregroundColor(.orange)
+                        
+                        Text("Thumbnail unavailable")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                        
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(height: videoThumbnailHeight)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
                 } else {
                     Rectangle()
                         .fill(Color.gray.opacity(0.3))
                         .frame(height: videoThumbnailHeight)
                 }
                 
-                // Overlay based on state
-                if viewModel.isOffline || viewModel.isLoading || !viewModel.isAnalysisTTSReady {
-                    // Busy indicator while waiting
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(1.5)
-                        .background(
-                            Circle()
-                                .fill(Color.black.opacity(0.6))
-                                .frame(width: 60, height: 60)
-                        )
-                } else if viewModel.analysisResult != nil && viewModel.isAnalysisTTSReady {
-                    // Play button when TTS is ready
-                    Button(action: {
-                        showVideoPlayer = true
-                        LiquidGlassHaptics.impact(.medium)
-                    }) {
-                        Image(systemName: "play.circle.fill")
-                            .font(.system(size: 70))
-                            .foregroundColor(.white)
+                // Overlay based on analysis state (only show if we have thumbnail or it failed to load)
+                if !viewModel.isThumbnailLoading {
+                    if viewModel.isOffline || viewModel.isLoading || !viewModel.isAnalysisTTSReady {
+                        // Busy indicator while waiting for analysis
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.5)
                             .background(
                                 Circle()
-                                    .fill(Color.black.opacity(0.3))
-                                    .blur(radius: 10)
+                                    .fill(Color.black.opacity(0.6))
+                                    .frame(width: 60, height: 60)
                             )
+                    } else if viewModel.analysisResult != nil && viewModel.isAnalysisTTSReady {
+                        // Play button when TTS is ready
+                        Button(action: {
+                            showVideoPlayer = true
+                            LiquidGlassHaptics.impact(.medium)
+                        }) {
+                            Image(systemName: "play.circle.fill")
+                                .font(.system(size: 70))
+                                .foregroundColor(.white)
+                                .background(
+                                    Circle()
+                                        .fill(Color.black.opacity(0.3))
+                                        .blur(radius: 10)
+                                )
+                        }
                     }
                 }
             }
@@ -427,23 +536,68 @@ struct SwingAnalysisView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(height: videoThumbnailHeight)
+                } else if viewModel.isThumbnailLoading {
+                    // Thumbnail loading state (non-interactive)
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.2)
+                        
+                        if viewModel.thumbnailLoadingProgress > 0 {
+                            ProgressView(value: viewModel.thumbnailLoadingProgress)
+                                .tint(.white)
+                                .scaleEffect(y: 1.5)
+                                .frame(width: 120)
+                        }
+                        
+                        Text("Loading thumbnail...")
+                            .font(.caption)
+                            .foregroundColor(.white)
+                    }
+                    .frame(height: videoThumbnailHeight)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(8)
+                } else if let errorMessage = viewModel.thumbnailErrorMessage {
+                    // Thumbnail error state
+                    VStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.title2)
+                            .foregroundColor(.orange)
+                        
+                        Text("Thumbnail unavailable")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                        
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(height: videoThumbnailHeight)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
                 } else {
                     Rectangle()
                         .fill(Material.ultraThin)
                         .frame(height: videoThumbnailHeight)
                 }
                 
-                // Play Button Overlay
-                Image(systemName: "play.circle.fill")
-                    .font(.system(size: 70))
-                    .foregroundColor(.white)
-                    .background(
-                        Circle()
-                            .fill(Color.black.opacity(0.3))
-                            .blur(radius: 10)
-                    )
+                // Play Button Overlay (only show if thumbnail is available and not loading)
+                if viewModel.videoThumbnail != nil && !viewModel.isThumbnailLoading {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 70))
+                        .foregroundColor(.white)
+                        .background(
+                            Circle()
+                                .fill(Color.black.opacity(0.3))
+                                .blur(radius: 10)
+                        )
+                }
             }
         }
+        .disabled(viewModel.videoThumbnail == nil || viewModel.isThumbnailLoading)
         .padding(.horizontal)
         .accessibilityLabel("Play swing analysis video")
         .accessibilityHint("Double tap to watch your swing with coaching overlay")
@@ -620,8 +774,6 @@ struct KeyMoment: Identifiable {
 
 // MARK: - Preview
 #Preview {
-    SwingAnalysisView(
-        videoURL: URL(fileURLWithPath: "/path/to/video.mp4"),
-        analysisId: nil
-    )
+    SwingAnalysisView()
+        .environmentObject(AppDependencies())
 }

@@ -3,14 +3,12 @@ import Combine
 
 @MainActor
 class VideoProcessingService: ObservableObject {
-    static let shared = VideoProcessingService()
-    
     @Published var isProcessing = false
     @Published var currentProcessingId: String?
     @Published var processingQueue: [String] = []
     
-    private let storageManager = AnalysisStorageManager.shared
-    private let connectivityService = ConnectivityService.shared
+    private let storageManager: AnalysisStorageManager
+    private let connectivityService: ConnectivityService
     private let apiClient = APIClient()
     
     private var activeTasks: Set<URLSessionTask> = []
@@ -18,8 +16,9 @@ class VideoProcessingService: ObservableObject {
     private var connectivityCallbackId: UUID?
     private var isProcessingQueue = false
     
-    private init() {
-        setupConnectivityMonitoring()
+    init(storageManager: AnalysisStorageManager, connectivityService: ConnectivityService) {
+        self.storageManager = storageManager
+        self.connectivityService = connectivityService
     }
     
     deinit {
@@ -78,9 +77,9 @@ class VideoProcessingService: ObservableObject {
         currentProcessingId = nil
     }
     
-    // MARK: - Private Methods
+    // MARK: - Public Methods - Setup
     
-    private func setupConnectivityMonitoring() {
+    func setupConnectivityMonitoring(connectivityService: ConnectivityService) {
         // Monitor connectivity changes
         connectivityService.$isConnected
             .sink { [weak self] isConnected in

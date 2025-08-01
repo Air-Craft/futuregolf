@@ -1,7 +1,8 @@
 import SwiftUI
 
 struct PreviousAnalysesView: View {
-    @StateObject private var storageManager = AnalysisStorageManager.shared
+    @EnvironmentObject var storageManager: AnalysisStorageManager
+    @EnvironmentObject var deps: AppDependencies
     @State private var showRecordingScreen = false
     @Environment(\.dismiss) private var dismiss
     
@@ -78,8 +79,12 @@ struct PreviousAnalysesView: View {
         }
         .navigationBarHidden(true)
         .fullScreenCover(isPresented: $showRecordingScreen) {
-            NavigationView {
+            NavigationStack {
                 RecordingScreen()
+                    .environmentObject(deps)
+                    .environmentObject(deps.analysisStorage)
+                    .environmentObject(deps.videoProcessing)
+                    .environmentObject(deps.connectivity)
             }
         }
     }
@@ -87,7 +92,8 @@ struct PreviousAnalysesView: View {
 
 struct AnalysisRow: View {
     let analysis: StoredAnalysis
-    @StateObject private var storageManager = AnalysisStorageManager.shared
+    @EnvironmentObject var storageManager: AnalysisStorageManager
+    @EnvironmentObject var deps: AppDependencies
     @State private var showAnalysis = false
     
     private var statusColor: Color {
@@ -183,10 +189,16 @@ struct AnalysisRow: View {
         }
         .buttonStyle(PlainButtonStyle())
         .fullScreenCover(isPresented: $showAnalysis) {
-            SwingAnalysisView(
-                videoURL: analysis.videoURL,
-                analysisId: analysis.id
-            )
+            NavigationStack {
+                SwingAnalysisView(
+                    videoURL: analysis.videoURL,
+                    analysisId: analysis.id
+                )
+                .environmentObject(deps)
+                .environmentObject(deps.analysisStorage)
+                .environmentObject(deps.videoProcessing)
+                .environmentObject(deps.connectivity)
+            }
         }
     }
 }

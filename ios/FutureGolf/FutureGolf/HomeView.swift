@@ -2,6 +2,7 @@ import SwiftUI
 import AVKit
 
 struct HomeView: View {
+    @EnvironmentObject var deps: AppDependencies
     @State private var showUploadFlow = false
     @State private var showAnalysisView = false
     @State private var showDemoVideo = false
@@ -123,6 +124,10 @@ struct HomeView: View {
             .fullScreenCover(isPresented: $showRecordingScreen) {
                 NavigationStack {
                     RecordingScreen()
+                        .environmentObject(deps)
+                        .environmentObject(deps.analysisStorage)
+                        .environmentObject(deps.videoProcessing)
+                        .environmentObject(deps.connectivity)
                 }
             }
             .sheet(isPresented: $showPreviousAnalyses) {
@@ -136,6 +141,7 @@ struct HomeView: View {
                                 }
                             }
                         }
+                        .environmentObject(deps.analysisStorage)
                 }
             }
             .sheet(isPresented: $showDebugPanel) {

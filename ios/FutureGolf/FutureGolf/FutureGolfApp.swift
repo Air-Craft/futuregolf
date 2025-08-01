@@ -11,28 +11,17 @@ import AVFoundation
 
 @main
 struct FutureGolfApp: App {
+    @StateObject private var deps = AppDependencies()
     
     // Debug flag for direct recording screen launch
     private let debugLaunchRecording = ProcessInfo.processInfo.environment["DEBUG_LAUNCH_RECORDING"] == "1"
     
     init() {
-        // Initialize connectivity monitoring
-        _ = ConnectivityService.shared
-        
-        // Initialize video processing service
-        _ = VideoProcessingService.shared
-        
-        // Initialize audio route manager
-        _ = AudioRouteManager.shared
-        
         // Test server connectivity at launch
         testServerConnection()
         
         // Start TTS cache warming in background
         warmTTSCache()
-        
-        // Process any pending video analyses
-        processPendingAnalyses()
     }
     
     var body: some Scene {
@@ -47,16 +36,32 @@ struct FutureGolfApp: App {
                 .onAppear {
                     setupTestEnvironment()
                 }
+                .environmentObject(deps)
+                .environmentObject(deps.analysisStorage)
+                .environmentObject(deps.videoProcessing)
+                .environmentObject(deps.connectivity)
             } else if debugLaunchRecording {
                 // Launch directly into recording screen for testing
                 NavigationView {
                     DebugRecordingLauncher()
                 }
                 .withToastOverlay()
+                .environmentObject(deps)
+                .environmentObject(deps.analysisStorage)
+                .environmentObject(deps.videoProcessing)
+                .environmentObject(deps.connectivity)
             } else {
                 // Normal app flow
                 HomeView()
                     .withToastOverlay()
+                    .environmentObject(deps)
+                    .environmentObject(deps.analysisStorage)
+                    .environmentObject(deps.videoProcessing)
+                    .environmentObject(deps.connectivity)
+                    .onAppear {
+                        // Process any pending video analyses after dependencies are set up
+                        processPendingAnalyses()
+                    }
             }
         }
     }
@@ -118,9 +123,11 @@ struct FutureGolfApp: App {
     private func warmTTSCache() {
         print("🚀 APP LAUNCH: Starting TTS cache warming...")
         
-        Task { @MainActor in
+        Task { @MainActor [weak deps] in
+            guard let deps = deps else { return }
+            
             // Check connectivity status
-            let isConnected = ConnectivityService.shared.isConnected
+            let isConnected = deps.connectivity.isConnected
             print("🚀 APP LAUNCH: Network connected: \(isConnected)")
             
             // Show connectivity status on launch if not connected
@@ -157,9 +164,11 @@ struct FutureGolfApp: App {
     private func processPendingAnalyses() {
         print("🚀 APP LAUNCH: Checking for pending video analyses...")
         
-        Task { @MainActor in
-            let processingService = VideoProcessingService.shared
-            let storageManager = AnalysisStorageManager.shared
+        Task { @MainActor [weak deps] in
+            guard let deps = deps else { return }
+            
+            let processingService = deps.videoProcessing
+            let storageManager = deps.analysisStorage
             
             // Get pending analyses
             let pendingAnalyses = storageManager.getPendingAnalyses()
@@ -167,7 +176,7 @@ struct FutureGolfApp: App {
             
             if !pendingAnalyses.isEmpty {
                 // Check connectivity
-                let isConnected = ConnectivityService.shared.isConnected
+                let isConnected = deps.connectivity.isConnected
                 
                 if isConnected {
                     print("🚀 Network available, starting processing...")
@@ -180,13 +189,87 @@ struct FutureGolfApp: App {
     }
     
     private func getTestVideoURL() -> URL {
-        // Try to load test video from bundle
+        print("🎬 GETTESTVIDEO: Looking for test video...")
+        
+        // Strategy 1: Try to load test video from main bundle
         if let url = Bundle.main.url(forResource: "test_video", withExtension: "mov") {
-            return url
+            if FileManager.default.fileExists(atPath: url.path) {
+                print("🎬 GETTESTVIDEO: ✅ Found in main bundle: \(url)")
+                return url
+            }
         }
-        // Fallback to documents directory
-        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("test_video.mov")
+        
+        // Strategy 2: Try to find in test bundles (for UI tests)
+        let testBundleNames = ["FutureGolfTestsShared", "FutureGolfUITests", "FutureGolfTests"]
+        for bundleName in testBundleNames {
+            if let bundlePath = Bundle.main.path(forResource: bundleName, ofType: "bundle"),
+               let testBundle = Bundle(path: bundlePath),
+               let url = testBundle.url(forResource: "test_video", withExtension: "mov") {
+                if FileManager.default.fileExists(atPath: url.path) {
+                    print("🎬 GETTESTVIDEO: ✅ Found in test bundle \(bundleName): \(url)")
+                    return url
+                }
+            }
+        }
+        
+        // Strategy 3: Check documents directory for copied test video
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let docTestVideoURL = documentsURL.appendingPathComponent("test_video.mov")
+        if FileManager.default.fileExists(atPath: docTestVideoURL.path) {
+            print("🎬 GETTESTVIDEO: ✅ Found in documents: \(docTestVideoURL)")
+            return docTestVideoURL
+        }
+        
+        // Strategy 4: Try to copy from test fixtures to documents
+        if let copiedURL = copyTestVideoToDocuments() {
+            print("🎬 GETTESTVIDEO: ✅ Copied to documents: \(copiedURL)")
+            return copiedURL
+        }
+        
+        // Strategy 5: Final fallback - return documents path even if it doesn't exist
+        // This allows the error to be handled downstream with proper logging
+        print("🎬 GETTESTVIDEO: ⚠️ Using fallback path (may not exist): \(docTestVideoURL)")
+        return docTestVideoURL
+    }
+    
+    private func copyTestVideoToDocuments() -> URL? {
+        print("🎬 COPYTESTVIDEOS: Attempting to copy test video to documents...")
+        
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let destinationURL = documentsURL.appendingPathComponent("test_video.mov")
+        
+        // Don't copy if it already exists
+        if FileManager.default.fileExists(atPath: destinationURL.path) {
+            print("🎬 COPYTESTVIDEOS: ✅ Already exists at destination")
+            return destinationURL
+        }
+        
+        // Try to find source video in various locations
+        let possibleSourcePaths = [
+            // Relative to project root
+            "../../../FutureGolfTestsShared/fixtures/test_video.mov",
+            "../../FutureGolfTestsShared/fixtures/test_video.mov",
+            "../FutureGolfTestsShared/fixtures/test_video.mov",
+            // Relative to bundle
+            Bundle.main.bundlePath + "/../FutureGolfTestsShared/fixtures/test_video.mov",
+            Bundle.main.bundlePath + "/../../FutureGolfTestsShared/fixtures/test_video.mov"
+        ]
+        
+        for relativePath in possibleSourcePaths {
+            let sourceURL = URL(fileURLWithPath: relativePath)
+            if FileManager.default.fileExists(atPath: sourceURL.path) {
+                do {
+                    try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+                    print("🎬 COPYTESTVIDEOS: ✅ Copied from \(sourceURL) to \(destinationURL)")
+                    return destinationURL
+                } catch {
+                    print("🎬 COPYTESTVIDEOS: ❌ Failed to copy from \(sourceURL): \(error)")
+                }
+            }
+        }
+        
+        print("🎬 COPYTESTVIDEOS: ❌ Could not find test video in any expected location")
+        return nil
     }
     
     private func setupTestEnvironment() {
@@ -202,8 +285,8 @@ struct FutureGolfApp: App {
             
             // Inject mock connectivity if needed
             if config.isUITesting && config.connectivityState == .offline {
-                // Use mock connectivity service
-                _ = MockConnectivityService.shared
+                // Would need to handle mock connectivity differently with DI
+                print("🎬 Mock connectivity state: offline")
             }
         }
     }

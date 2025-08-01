@@ -57,6 +57,9 @@ enum CameraConfiguration {
 @Observable
 class RecordingViewModel: NSObject, ObservableObject {
     
+    // MARK: - Dependencies
+    weak var dependencies: AppDependencies?
+    
     // MARK: - Published Properties
     var currentPhase: RecordingPhase = .setup
     var isRecording = false
@@ -123,7 +126,8 @@ class RecordingViewModel: NSObject, ObservableObject {
     var onCancelRequested: (() -> Void)?
     var onStillCaptured: ((UIImage) -> Void)?
     
-    override init() {
+    init(dependencies: AppDependencies? = nil) {
+        self.dependencies = dependencies
         super.init()
         
         // Enhanced error logging for debugging
@@ -948,12 +952,18 @@ extension RecordingViewModel: AVCaptureFileOutputRecordingDelegate {
                 self.recordedVideoURL = outputFileURL
                 
                 // Save analysis record and queue for processing
-                let processingService = VideoProcessingService.shared
-                self.recordedAnalysisId = processingService.queueVideo(videoURL: outputFileURL)
-                
-                // Now that we have the video URL, transition to processing
-                if self.currentPhase != .processing {
-                    self.currentPhase = .processing
+                if let deps = self.dependencies {
+                    self.recordedAnalysisId = deps.videoProcessing.queueVideo(videoURL: outputFileURL)
+                    
+                    // Update global state
+                    deps.setCurrentRecording(url: outputFileURL, id: self.recordedAnalysisId!)
+                    
+                    // Now that we have the video URL, transition to processing
+                    if self.currentPhase != .processing {
+                        self.currentPhase = .processing
+                    }
+                } else {
+                    print("⚠️ No dependencies available, cannot queue video")
                 }
             }
         }

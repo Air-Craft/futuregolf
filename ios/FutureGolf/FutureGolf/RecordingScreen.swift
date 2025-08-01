@@ -2,16 +2,19 @@ import SwiftUI
 import AVFoundation
 
 struct RecordingScreen: View {
-    @StateObject private var viewModel = RecordingViewModel()
+    @EnvironmentObject var deps: AppDependencies
+    @StateObject private var viewModel: RecordingViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var showCancelConfirmation = false
     @State private var cameraPreview: AVCaptureVideoPreviewLayer?
-    @State private var showSwingAnalysis = false
-    @State private var recordedVideoURL: URL?
-    @State private var recordedAnalysisId: String?
+    @State private var shouldNavigateToAnalysis = false
     @State private var deviceOrientation = UIDevice.current.orientation
     @State private var currentZoom: CGFloat = 1.0
     @State private var showZoomIndicator = false
+    
+    init() {
+        _viewModel = StateObject(wrappedValue: RecordingViewModel())
+    }
     
     var body: some View {
         ZStack {
@@ -80,6 +83,7 @@ struct RecordingScreen: View {
         .navigationBarHidden(true)
         .preferredColorScheme(.dark) // Better visibility over camera feed
         .onAppear {
+            viewModel.dependencies = deps
             setupRecordingScreen()
             setupOrientationObserver()
         }
@@ -93,39 +97,17 @@ struct RecordingScreen: View {
                 viewModel.updateOrientation(newOrientation)
             }
         }
-        .onChange(of: viewModel.recordedVideoURL) { oldValue, newValue in
-            print("🎹 RecordingScreen: recordedVideoURL changed")
-            print("🎹 oldValue: \(oldValue?.absoluteString ?? "nil")")
-            print("🎹 newValue: \(newValue?.absoluteString ?? "nil")")
-            print("🎹 currentPhase: \(viewModel.currentPhase)")
+        .onChange(of: viewModel.currentPhase) { oldValue, newValue in
+            print("🎹 RecordingScreen: currentPhase changed from \(oldValue) to \(newValue)")
             
-            if let videoURL = newValue, viewModel.currentPhase == .processing {
-                // Set values and show
-                self.recordedVideoURL = videoURL
-                self.recordedAnalysisId = viewModel.recordedAnalysisId
-                print("🎹 Set recordedVideoURL: \(videoURL.absoluteString)")
-                print("🎹 Set recordedAnalysisId: \(viewModel.recordedAnalysisId ?? "nil")")
-                
-                // Ensure we have the URL before navigating
-                if self.recordedVideoURL != nil {
-                    showSwingAnalysis = true
-                } else {
-                    print("🎹 ERROR: recordedVideoURL is nil after setting!")
-                }
+            if newValue == .processing && deps.currentRecordingId != nil {
+                print("🎹 Recording complete, navigating to analysis")
+                shouldNavigateToAnalysis = true
             }
         }
-        .fullScreenCover(isPresented: $showSwingAnalysis) {
-            // Use a default URL if somehow it's nil (shouldn't happen)
-            let videoURL = recordedVideoURL ?? URL(fileURLWithPath: "/tmp/placeholder.mp4")
-            SwingAnalysisView(videoURL: videoURL, analysisId: recordedAnalysisId)
-                .onAppear {
-                    print("🎹 SwingAnalysisView presented")
-                    print("🎹 - videoURL: \(videoURL.absoluteString)")
-                    print("🎹 - analysisId: \(recordedAnalysisId ?? "nil")")
-                    if recordedVideoURL == nil {
-                        print("🎹 WARNING: Using placeholder URL because recordedVideoURL was nil!")
-                    }
-                }
+        .navigationDestination(isPresented: $shouldNavigateToAnalysis) {
+            SwingAnalysisView()
+                .environmentObject(deps)
         }
         .confirmationDialog("Cancel Recording", isPresented: $showCancelConfirmation) {
             Button("Cancel Recording", role: .destructive) {

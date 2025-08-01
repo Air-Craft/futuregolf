@@ -7,6 +7,7 @@ import UIKit
 
 @MainActor
 class ConnectivityService: ObservableObject {
+    // Temporary singleton for TTSService compatibility
     static let shared = ConnectivityService()
     
     // Published properties for UI binding
@@ -31,18 +32,10 @@ class ConnectivityService: ObservableObject {
     private var onConnectivityCallbacks: [UUID: () -> Void] = [:]
     
     // Server endpoint
-    private let serverHealthEndpoint = "\(Config.serverBaseURL)/api/v1/health"
+    private let serverHealthEndpoint = "\(Config.serverBaseURL)/health"
     
-    private init() {
-        setupLifecycleObservers()
-        startMonitoring()
-        setupDebugToasts()
-        
-        // Start server health checking immediately
-        Task {
-            await checkServerHealth()
-            startServerHealthPolling()
-        }
+    init() {
+        // Initialization will be handled by startMonitoring
     }
     
     deinit {
@@ -119,7 +112,11 @@ class ConnectivityService: ObservableObject {
         serverCheckTimer = nil
     }
     
-    private func startMonitoring() {
+    func startMonitoring() {
+        setupLifecycleObservers()
+        setupDebugToasts()
+        
+        // Start monitoring network path
         monitor.pathUpdateHandler = { [weak self] path in
             Task { @MainActor in
                 self?.updateNetworkStatus(path)
@@ -127,6 +124,12 @@ class ConnectivityService: ObservableObject {
         }
         
         monitor.start(queue: queue)
+        
+        // Start server health checking immediately
+        Task {
+            await checkServerHealth()
+            startServerHealthPolling()
+        }
     }
     
     private func updateNetworkStatus(_ path: NWPath) {
@@ -306,17 +309,4 @@ protocol ConnectivityAware {
     func onConnectivityLost()
 }
 
-// Extension to make it easier to use
-extension ConnectivityAware where Self: AnyObject {
-    @MainActor
-    func setupConnectivityMonitoring() -> UUID {
-        let id = ConnectivityService.shared.onConnectivityRestored { [weak self] in
-            self?.onConnectivityRestored()
-        }
-        
-        // Also monitor for connectivity lost via published property
-        // Note: Services should subscribe directly to $isConnected if they need loss notifications
-        
-        return id
-    }
-}
+// Extension removed - no longer using singleton pattern
