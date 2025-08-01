@@ -71,8 +71,7 @@ class SwingAnalysisViewModel: ObservableObject {
             processingStatus = "Waiting for connectivity"
             processingDetail = "Your swing will be analyzed when connection is restored"
             
-            // Show connectivity toast
-            ToastManager.shared.show("Waiting for connectivity...", type: .warning, duration: .infinity, id: "connectivity")
+            // The connectivity toast is already shown by ConnectivityService
             return
         }
         

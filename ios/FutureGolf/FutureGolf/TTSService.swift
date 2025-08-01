@@ -197,14 +197,13 @@ class TTSService: NSObject, ObservableObject {
         return data
     }
     
+    @MainActor
     private func playAudio(data: Data, completion: @escaping (Bool) -> Void) {
         do {
             print("🗣️ TTS: Creating AVAudioPlayer with \(data.count) bytes of audio data")
             
-            // Use AudioRouteManager to configure for playback
-            Task { @MainActor in
-                audioRouteManager?.configureForPlayback()
-            }
+            // Configure audio session synchronously BEFORE creating player
+            audioRouteManager?.configureForPlayback()
             
             audioPlayer = try AVAudioPlayer(data: data)
             audioPlayer?.volume = 1.0  // Maximum volume

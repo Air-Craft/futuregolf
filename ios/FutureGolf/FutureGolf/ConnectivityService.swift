@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import Combine
+import UIKit
 
 // MARK: - Connectivity Service
 
@@ -8,23 +9,45 @@ import Combine
 class ConnectivityService: ObservableObject {
     static let shared = ConnectivityService()
     
-    @Published var isConnected: Bool = true
+    // Published properties for UI binding
+    @Published var isConnected: Bool = false // Combined network + server connectivity
     @Published var connectionType: NWInterface.InterfaceType?
     
+    // Server connectivity tracking
+    private(set) var lastConnectivityCheck: Date = .distantPast
+    private var isNetworkAvailable: Bool = false
+    private var isServerReachable: Bool = false
+    
+    // Monitoring infrastructure
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "com.futuregolf.connectivity")
+    private var serverCheckTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
+    
+    // App lifecycle
+    private var isAppActive = true
     
     // Callbacks for when connectivity is restored
     private var onConnectivityCallbacks: [UUID: () -> Void] = [:]
     
+    // Server endpoint
+    private let serverHealthEndpoint = "\(Config.serverBaseURL)/api/v1/health"
+    
     private init() {
+        setupLifecycleObservers()
         startMonitoring()
         setupDebugToasts()
+        
+        // Start server health checking immediately
+        Task {
+            await checkServerHealth()
+            startServerHealthPolling()
+        }
     }
     
     deinit {
         monitor.cancel()
+        serverCheckTimer?.invalidate()
     }
     
     // MARK: - Public Methods
@@ -47,47 +70,72 @@ class ConnectivityService: ObservableObject {
         onConnectivityCallbacks.removeValue(forKey: id)
     }
     
-    /// Check if a specific host is reachable
-    func isHostReachable(_ urlString: String) async -> Bool {
-        guard isConnected else { return false }
-        
-        guard let url = URL(string: urlString) else { return false }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "HEAD"
-        request.timeoutInterval = 5.0
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse {
-                return (200...299).contains(httpResponse.statusCode)
-            }
-            return false
-        } catch {
-            return false
+    /// Get best guess of connectivity based on last check
+    var isLikelyConnected: Bool {
+        // If checked within last 5 seconds, use cached result
+        if Date().timeIntervalSince(lastConnectivityCheck) < 5.0 {
+            return isConnected
         }
+        // Otherwise just check network availability
+        return isNetworkAvailable
     }
     
     // MARK: - Private Methods
     
+    private func setupLifecycleObservers() {
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.applicationDidBecomeActive()
+                }
+            }
+            .store(in: &cancellables)
+        
+        NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.applicationWillResignActive()
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
+    private func applicationDidBecomeActive() {
+        print("🌐 App became active, resuming connectivity monitoring")
+        isAppActive = true
+        // Check immediately
+        Task {
+            await checkServerHealth()
+        }
+        // Resume polling
+        startServerHealthPolling()
+    }
+    
+    private func applicationWillResignActive() {
+        print("🌐 App resigning active, suspending connectivity monitoring")
+        isAppActive = false
+        // Stop polling to save battery
+        serverCheckTimer?.invalidate()
+        serverCheckTimer = nil
+    }
+    
     private func startMonitoring() {
         monitor.pathUpdateHandler = { [weak self] path in
             Task { @MainActor in
-                self?.updateConnectionStatus(path)
+                self?.updateNetworkStatus(path)
             }
         }
         
         monitor.start(queue: queue)
     }
     
-    @MainActor
-    private func updateConnectionStatus(_ path: NWPath) {
-        let wasConnected = isConnected
+    private func updateNetworkStatus(_ path: NWPath) {
+        let wasNetworkAvailable = isNetworkAvailable
         
-        isConnected = path.status == .satisfied
+        isNetworkAvailable = path.status == .satisfied
         
         // Update connection type
-        if isConnected {
+        if isNetworkAvailable {
             if path.usesInterfaceType(.wifi) {
                 connectionType = .wifi
             } else if path.usesInterfaceType(.cellular) {
@@ -101,21 +149,129 @@ class ConnectivityService: ObservableObject {
             connectionType = nil
         }
         
-        // Call callbacks if connectivity was restored
-        if !wasConnected && isConnected {
-            print("🌐 Connectivity restored")
-            for callback in onConnectivityCallbacks.values {
-                callback()
+        // If network status changed, check server immediately
+        if wasNetworkAvailable != isNetworkAvailable {
+            Task {
+                await checkServerHealth()
             }
         }
         
         // Debug logging
         if Config.isDebugEnabled {
-            if isConnected {
-                print("🌐 Network connected via \(connectionTypeString)")
+            if isNetworkAvailable {
+                print("🌐 Network available via \(connectionTypeString)")
             } else {
-                print("🌐 Network disconnected")
+                print("🌐 Network unavailable")
             }
+        }
+    }
+    
+    private func startServerHealthPolling() {
+        // Cancel existing timer
+        serverCheckTimer?.invalidate()
+        
+        // Only poll when app is active
+        guard isAppActive else { return }
+        
+        // Poll every 1 second
+        serverCheckTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self, self.isAppActive else { return }
+                await self.checkServerHealth()
+            }
+        }
+    }
+    
+    private func checkServerHealth() async {
+        // Skip if no network
+        guard isNetworkAvailable else {
+            updateConnectivityStatus(serverReachable: false)
+            return
+        }
+        
+        lastConnectivityCheck = Date()
+        
+        guard let url = URL(string: serverHealthEndpoint) else {
+            updateConnectivityStatus(serverReachable: false)
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 2.0 // Short timeout for health check
+        
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse {
+                let serverReachable = (200...299).contains(httpResponse.statusCode)
+                updateConnectivityStatus(serverReachable: serverReachable)
+            } else {
+                updateConnectivityStatus(serverReachable: false)
+            }
+        } catch {
+            updateConnectivityStatus(serverReachable: false)
+        }
+    }
+    
+    private func updateConnectivityStatus(serverReachable: Bool) {
+        let wasServerReachable = isServerReachable
+        let wasConnected = isConnected
+        
+        isServerReachable = serverReachable
+        
+        // Combined connectivity = network AND server
+        let newConnected = isNetworkAvailable && isServerReachable
+        
+        // Only update if status actually changed
+        if isConnected != newConnected {
+            isConnected = newConnected
+            
+            if wasConnected && !isConnected {
+                // Lost connectivity
+                print("🌐 Connectivity lost")
+                showConnectivityToast(connected: false)
+            } else if !wasConnected && isConnected {
+                // Gained connectivity
+                print("🌐 Connectivity restored")
+                showConnectivityToast(connected: true)
+                onConnectivityRestored()
+            }
+        }
+        
+        // Debug logging
+        if Config.isDebugEnabled && wasServerReachable != isServerReachable {
+            print("🌐 Server reachable: \(isServerReachable)")
+        }
+    }
+    
+    private func showConnectivityToast(connected: Bool) {
+        if connected {
+            // Clear any existing connectivity warning
+            ToastManager.shared.dismiss(id: "connectivity")
+            // Show success briefly
+            ToastManager.shared.show("Connected", type: .success, duration: 2.0)
+        } else {
+            // Show persistent warning
+            ToastManager.shared.show("Waiting for connectivity...", 
+                                   type: .warning, 
+                                   duration: .infinity, 
+                                   id: "connectivity")
+        }
+    }
+    
+    private func onConnectivityRestored() {
+        // Call all registered callbacks
+        for callback in onConnectivityCallbacks.values {
+            callback()
+        }
+        
+        // Resume pending operations
+        Task {
+            // 1. Warm TTS cache
+            TTSService.shared.cacheManager.warmCache()
+            
+            // 2. Resume any pending swing analyses
+            // This will be handled by SwingAnalysisViewModel subscribers
         }
     }
     
@@ -135,25 +291,11 @@ class ConnectivityService: ObservableObject {
     }
     
     private func setupDebugToasts() {
-        #if DEBUG
-        // Show connectivity status changes as toasts
-        $isConnected
-            .removeDuplicates()
-            .dropFirst() // Don't show initial state
-            .sink { isConnected in
-                if isConnected {
-                    if self.connectionType != nil {
-                        let typeString = self.connectionTypeString
-                        ToastManager.shared.show("Connected via \(typeString)", type: .success)
-                    } else {
-                        ToastManager.shared.show("Connected", type: .success)
-                    }
-                } else {
-                    ToastManager.shared.show("No network connection", type: .error)
-                }
-            }
-            .store(in: &cancellables)
-        #endif
+        // Don't show debug toasts in release mode
+        guard Config.isDebugEnabled else { return }
+        
+        // We handle toasts in showConnectivityToast() for unified messaging
+        // This method is kept for potential future debug-specific toasts
     }
 }
 
@@ -167,12 +309,14 @@ protocol ConnectivityAware {
 // Extension to make it easier to use
 extension ConnectivityAware where Self: AnyObject {
     @MainActor
-    func setupConnectivityMonitoring() {
-        _ = ConnectivityService.shared.onConnectivityRestored { [weak self] in
+    func setupConnectivityMonitoring() -> UUID {
+        let id = ConnectivityService.shared.onConnectivityRestored { [weak self] in
             self?.onConnectivityRestored()
         }
         
-        // Store the callback ID if needed for cleanup
-        // You might want to store this in a property for later removal
+        // Also monitor for connectivity lost via published property
+        // Note: Services should subscribe directly to $isConnected if they need loss notifications
+        
+        return id
     }
 }

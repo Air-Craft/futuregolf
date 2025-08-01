@@ -131,9 +131,8 @@ class VideoProcessingService: ObservableObject {
         storageManager.updateStatus(id: analysis.id, status: .uploading)
         
         do {
-            // Check if server is reachable
-            let serverReachable = await connectivityService.isHostReachable(Config.serverBaseURL)
-            guard serverReachable else {
+            // Check if connected (network + server)
+            guard connectivityService.isConnected else {
                 throw ProcessingError.serverUnreachable
             }
             

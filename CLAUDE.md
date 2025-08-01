@@ -44,6 +44,8 @@ See Spec/OVERVIEW.md for more details
 
 ## Development Approach
 
+!IMPORTANT: Always check iOS builds after making changes where it is expected to work afterwards. Similarly always try to start the server when backend changes are made. Fix any errors before completing the task. 
+
 ### Components
 
 #### iOS App

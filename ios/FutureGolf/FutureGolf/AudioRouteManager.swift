@@ -12,6 +12,8 @@ class AudioRouteManager: ObservableObject {
     @Published var isHeadphonesConnected: Bool = false
     
     private var routeChangeObserver: NSObjectProtocol?
+    private var lastConfiguredForHeadphones: Bool?
+    private var lastConfigurationTime: Date = .distantPast
     
     private init() {
         setupRouteChangeNotification()
@@ -51,14 +53,18 @@ class AudioRouteManager: ObservableObject {
         case .newDeviceAvailable:
             print("🎧 New audio device available")
             updateCurrentRoute()
-            // Reconfigure to use the new device
-            configureForPlayback()
+            // Only reconfigure if category changed (speaker vs headphones)
+            if shouldReconfigureAudio() {
+                configureForPlayback()
+            }
             
         case .oldDeviceUnavailable:
             print("🎧 Audio device disconnected")
             updateCurrentRoute()
-            // Reconfigure to ensure speaker is used
-            configureForPlayback()
+            // Only reconfigure if category changed
+            if shouldReconfigureAudio() {
+                configureForPlayback()
+            }
             
         case .categoryChange:
             print("🎧 Audio category changed")
@@ -123,28 +129,38 @@ class AudioRouteManager: ObservableObject {
         do {
             let session = AVAudioSession.sharedInstance()
             
-            // Use .playAndRecord to support both TTS and voice recording
-            // Allow Bluetooth and respect current audio route
-            try session.setCategory(
-                .playAndRecord,
-                mode: .default,
-                options: [
-                    .duckOthers,
-                    .allowBluetooth,
-                    .allowBluetoothA2DP,
-                    .allowAirPlay,
-                    .defaultToSpeaker  // Use speaker when no headphones connected
-                ]
-            )
-            
-            // Check if headphones are connected
+            // Check if headphones are connected first
             let currentRoute = session.currentRoute
             let hasHeadphones = currentRoute.outputs.contains { output in
                 return output.portType == .headphones ||
                        output.portType == .bluetoothA2DP ||
                        output.portType == .bluetoothHFP ||
-                       output.portType == .bluetoothLE
+                       output.portType == .bluetoothLE ||
+                       output.portType == .airPlay
             }
+            
+            // Build options based on output device
+            var options: AVAudioSession.CategoryOptions = [
+                .allowBluetooth,
+                .allowBluetoothA2DP,
+                .allowAirPlay,
+                .defaultToSpeaker  // Use speaker when no headphones connected
+            ]
+            
+            // Only add .duckOthers when using speakers to avoid chorusing with headphones
+            if !hasHeadphones {
+                options.insert(.duckOthers)
+                print("🎧 Adding .duckOthers option for speaker playback")
+            } else {
+                print("🎧 Skipping .duckOthers option for headphone playback to prevent chorusing")
+            }
+            
+            // Use .playAndRecord to support both TTS and voice recording
+            try session.setCategory(
+                .playAndRecord,
+                mode: .default,
+                options: options
+            )
             
             // If no headphones, ensure we're using the speaker, not earpiece
             if !hasHeadphones {
@@ -155,6 +171,11 @@ class AudioRouteManager: ObservableObject {
             
             print("🎧 Audio session configured for playback")
             print("🎧 Using speaker override: \(!hasHeadphones)")
+            print("🎧 Headphones connected: \(hasHeadphones)")
+            
+            // Track last configuration
+            lastConfiguredForHeadphones = hasHeadphones
+            lastConfigurationTime = Date()
         } catch {
             print("🎧 Failed to configure audio session: \(error)")
         }
@@ -165,25 +186,36 @@ class AudioRouteManager: ObservableObject {
         do {
             let session = AVAudioSession.sharedInstance()
             
-            // Use measurement mode for better voice recognition
-            try session.setCategory(
-                .playAndRecord,
-                mode: .measurement,
-                options: [
-                    .duckOthers,
-                    .allowBluetooth,
-                    .defaultToSpeaker  // Ensure speaker is used when no headphones
-                ]
-            )
-            
             // Check current route to see if we need speaker override
             let currentRoute = session.currentRoute
             let hasHeadphones = currentRoute.outputs.contains { output in
                 return output.portType == .headphones ||
                        output.portType == .bluetoothA2DP ||
                        output.portType == .bluetoothHFP ||
-                       output.portType == .bluetoothLE
+                       output.portType == .bluetoothLE ||
+                       output.portType == .airPlay
             }
+            
+            // Build options based on output device
+            var options: AVAudioSession.CategoryOptions = [
+                .allowBluetooth,
+                .defaultToSpeaker  // Ensure speaker is used when no headphones
+            ]
+            
+            // Only add .duckOthers when using speakers to avoid chorusing with headphones
+            if !hasHeadphones {
+                options.insert(.duckOthers)
+                print("🎧 Adding .duckOthers option for speaker recording")
+            } else {
+                print("🎧 Skipping .duckOthers option for headphone recording to prevent chorusing")
+            }
+            
+            // Use measurement mode for better voice recognition
+            try session.setCategory(
+                .playAndRecord,
+                mode: .measurement,
+                options: options
+            )
             
             // Only override to speaker if no headphones connected
             if !hasHeadphones {
@@ -198,6 +230,7 @@ class AudioRouteManager: ObservableObject {
             }
             
             print("🎧 Audio session configured for recording")
+            print("🎧 Headphones connected: \(hasHeadphones)")
         } catch {
             print("🎧 Failed to configure audio session: \(error)")
         }
@@ -223,6 +256,27 @@ class AudioRouteManager: ObservableObject {
         return info
     }
     
+    /// Check if we should reconfigure audio based on route change
+    private func shouldReconfigureAudio() -> Bool {
+        // Don't reconfigure too frequently (debounce)
+        guard Date().timeIntervalSince(lastConfigurationTime) > 0.5 else {
+            print("🎧 Skipping reconfiguration (too soon)")
+            return false
+        }
+        
+        // Check if headphone state actually changed
+        if let lastHeadphones = lastConfiguredForHeadphones {
+            let changed = lastHeadphones != isHeadphonesConnected
+            if changed {
+                print("🎧 Headphone state changed: \(lastHeadphones) → \(isHeadphonesConnected)")
+            }
+            return changed
+        }
+        
+        // First configuration
+        return true
+    }
+    
     /// Force refresh audio configuration
     func refreshAudioConfiguration() {
         print("🎧 Refreshing audio configuration...")
@@ -230,13 +284,8 @@ class AudioRouteManager: ObservableObject {
         // Log current route
         print(getCurrentRouteInfo())
         
-        // Reconfigure based on current usage
-        let session = AVAudioSession.sharedInstance()
-        if session.isOtherAudioPlaying {
-            configureForPlayback()
-        } else {
-            // Default to playback config
-            configureForPlayback()
-        }
+        // Force reconfiguration
+        lastConfiguredForHeadphones = nil
+        configureForPlayback()
     }
 }

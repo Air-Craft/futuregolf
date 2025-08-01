@@ -113,6 +113,14 @@ struct FutureGolfApp: App {
             let isConnected = ConnectivityService.shared.isConnected
             print("🚀 APP LAUNCH: Network connected: \(isConnected)")
             
+            // Show connectivity status on launch if not connected
+            if !isConnected {
+                ToastManager.shared.show("Waiting for connectivity...", 
+                                       type: .warning, 
+                                       duration: .infinity, 
+                                       id: "connectivity")
+            }
+            
             let cacheManager = TTSService.shared.cacheManager
             
             // Check current cache status
@@ -127,8 +135,12 @@ struct FutureGolfApp: App {
             print("🚀   - Force refresh: \(Config.ttsForceCacheRefreshOnLaunch)")
             print("🚀   - Should refresh: \(cacheManager.shouldRefreshCache())")
             
-            // Start warming (will check connectivity internally)
-            cacheManager.warmCache()
+            // Only warm cache if connected
+            if isConnected {
+                cacheManager.warmCache()
+            } else {
+                print("🚀 APP LAUNCH: No connectivity, skipping cache warming")
+            }
         }
     }
     
