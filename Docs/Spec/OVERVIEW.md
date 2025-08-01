@@ -41,6 +41,12 @@ AI-powered mobile app that records golf swings, analyzes them using AI, and prov
 - **Integration tests** for complete pipeline validation
 - **E2E tests** from video upload to analysis output
 
+
+### Documentation
+
+- Always document the development and tests in the respective files in `Docs/Dev` looking for existing relevant files first and creating any needed.
+
+
 *Detailed testing procedures and scenarios are documented in Spec/Testing/*
 
 ## Project Organization

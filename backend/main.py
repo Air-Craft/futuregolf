@@ -18,6 +18,7 @@ from api.video_analysis import router as video_analysis_router
 from api.tts import router as tts_router
 from api.recording_voice import router as recording_voice_router
 from api.recording_swing import router as recording_swing_router
+from api.swing_detection_ws_simple import router as swing_detection_ws_router
 
 app = FastAPI(
     title="FutureGolf API",
@@ -47,6 +48,7 @@ app.include_router(video_analysis_router)
 app.include_router(tts_router)
 app.include_router(recording_voice_router)
 app.include_router(recording_swing_router)
+app.include_router(swing_detection_ws_router)
 
 @app.get("/")
 async def root():
