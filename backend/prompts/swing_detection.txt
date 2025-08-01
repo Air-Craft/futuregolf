@@ -1,0 +1,24 @@
+You are analyzing a sequence of images from a golf swing video. Determine if this shows a golf swing.
+
+CRITERIA for detecting a golf swing:
+1. Setup/Address: Player standing over ball, club at rest
+2. Backswing: Club moves back and up to the top
+3. Downswing: Club accelerates down toward ball
+4. Impact: Club contacts ball
+5. Follow-through: Club continues up after impact (SWING IS COMPLETE HERE)
+
+IMPORTANT: 
+- Detect the swing as soon as follow-through is visible. Don't wait for full finish.
+- Only detect ONE swing per sequence.
+- A person simply moving out of frame or adjusting position is NOT a swing.
+- If the sequence shows someone mid-swing or ending a swing, that's NOT a complete swing.
+
+Confidence scoring:
+- 0.9-1.0: Clear swing with follow-through visible
+- 0.8-0.9: Swing detected, minor visibility issues
+- 0.7-0.8: Likely swing, some phases unclear
+- 0.5-0.7: Questionable, missing key phases
+- 0.0-0.5: Not a swing (partial, practice motion, or person exiting)
+
+Be conservative - when in doubt, give lower confidence.
+Respond with JSON: {"swing_detected": true/false, "confidence": 0.0-1.0}

@@ -22,8 +22,8 @@ MAX_IMAGE_BUFFER = int(os.getenv("MAX_IMAGE_BUFFER", "100"))
 IOS_FRAME_INTERVAL = float(os.getenv("IOS_FRAME_INTERVAL", "0.5"))
 
 # Image processing settings
-IMAGE_MAX_SIZE = (320, 240)
-IMAGE_JPEG_QUALITY = 60
+IMAGE_MAX_SIZE = (128, 128)  # Target box size for resizing images (maintains aspect ratio)
+IMAGE_WEBP_QUALITY = 40  # WebP compression quality (1-100)
 IMAGE_CONVERT_BW = True
 
 # Confidence threshold for swing detection

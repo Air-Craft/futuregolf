@@ -2,7 +2,7 @@ import SwiftUI
 import AVFoundation
 
 struct RecordingScreen: View {
-    @StateObject private var viewModel = RecordingViewModel()
+    @State private var viewModel = RecordingViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var showCancelConfirmation = false
     @State private var cameraPreview: AVCaptureVideoPreviewLayer?
@@ -534,7 +534,7 @@ struct ProgressCirclesView: View {
 // MARK: - Camera Preview View
 
 struct CameraPreviewView: UIViewRepresentable {
-    @ObservedObject var viewModel: RecordingViewModel
+    var viewModel: RecordingViewModel
     
     func makeUIView(context: Context) -> UIView {
         print("🐛 CameraPreviewView: Creating preview view")

@@ -6,8 +6,8 @@ struct Config {
     /// The base URL for the backend API server
     static let serverBaseURL: String = {
         // Check for environment variable first, then fallback to default
-//        return ProcessInfo.processInfo.environment["API_BASE_URL"] ?? "http://brians-macbook-pro-2.local:8000"
-        return "http://brians-macbook-pro-2.local:8000"
+//        return ProcessInfo.processInfo.environment["API_BASE_URL"] ?? "http://brians-macbook-pro-2.local:8001"
+        return "http://brians-macbook-pro-2.local:8001"
     }()
     
     /// API version endpoint
@@ -31,6 +31,26 @@ struct Config {
     
     /// Target number of swings to record
     static let targetSwingCount = 3
+    
+    /// Frame capture interval for swing detection (in seconds)
+    static let stillCaptureInterval: TimeInterval = 0.5
+    
+    /// Post-detection cooldown period (in seconds)
+    static let postDetectionCooldown: TimeInterval = 2.0
+    
+    /// Convert images to black and white for faster processing
+    static let imageConvertBW = true
+    
+    /// Disable swing detection (bypass server queries)
+    static let disableSwingDetection = false
+    
+    // MARK: - Image Processing Configuration
+    
+    /// Target box size for resizing images (maintains aspect ratio)
+    static let imageMaxSize = CGSize(width: 128, height: 128)
+    
+    /// JPEG compression quality (0.0-1.0) - equivalent to WebP quality 40
+    static let imageJPEGQuality: CGFloat = 0.4
     
     // MARK: - TTS Cache Configuration
     
