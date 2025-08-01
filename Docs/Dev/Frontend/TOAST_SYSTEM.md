@@ -2,25 +2,27 @@
 
 ## Overview
 
-The Toast System provides a global, non-blocking way to display brief messages and progress indicators to users. It supports multiple toast types, progress tracking, and automatic queuing for seamless user feedback.
+The Toast System provides a global, non-blocking way to display brief messages and progress indicators to users. It now supports multiple simultaneous toasts, custom IDs for targeted dismissal, and persistent toasts.
 
 ## Architecture
 
 ### Core Components
 
-1. **ToastManager** - Singleton managing toast queue and display
+1. **ToastManager** - Singleton managing active toasts and queue
 2. **Toast Model** - Data structure for toast content and styling
-3. **ToastView** - SwiftUI view for rendering toasts
+3. **ToastView** - SwiftUI view for rendering individual toasts
 4. **ToastOverlay** - ViewModifier for app-wide integration
 
 ### Features
 
-- Multiple toast types (info, success, warning, error)
-- Progress toast with real-time updates
-- Automatic queuing and display management
-- Tap to dismiss (non-progress toasts)
-- Customizable duration
-- Beautiful animations and styling
+- **Multiple Simultaneous Toasts** - Display up to 3 toasts at once
+- **Custom Toast IDs** - Dismiss specific toasts by ID
+- **Persistent Toasts** - Toasts that don't auto-dismiss
+- **Multiple toast types** (info, success, warning, error)
+- **Progress toast with real-time updates**
+- **Swipe to dismiss** - Swipe down gesture support
+- **Automatic queuing** - Additional toasts queue when limit reached
+- **Beautiful animations and styling**
 
 ## Implementation Details
 
@@ -47,6 +49,23 @@ ToastManager.shared.show("Network error", type: .error, duration: 5.0)
 
 // Info toast (default type)
 ToastManager.shared.show("Processing your request...")
+```
+
+#### Persistent Toasts with Custom IDs
+```swift
+// Show persistent toast with custom ID
+ToastManager.shared.show(
+    "Waiting for connectivity...", 
+    type: .warning, 
+    duration: .infinity,  // Never auto-dismiss
+    id: "connectivity"
+)
+
+// Later, dismiss by ID
+ToastManager.shared.dismiss(id: "connectivity")
+
+// Show completion
+ToastManager.shared.show("Connection restored", type: .success)
 ```
 
 #### Progress Toasts
@@ -81,18 +100,25 @@ struct FutureGolfApp: App {
 
 ## Toast Queue Management
 
-The system automatically manages multiple toasts:
+The system now supports multiple active toasts:
 
-1. **Current Toast**: Displayed immediately
-2. **Queued Toasts**: Shown after current toast dismisses
-3. **Progress Toasts**: Can interrupt queue for immediate display
+1. **Active Toasts**: Up to 3 toasts displayed simultaneously
+2. **Queued Toasts**: Additional toasts wait in queue
+3. **Stacking**: Toasts stack vertically with 8pt spacing
+4. **Persistent Toasts**: Don't count against auto-dismiss timers
 
 Example flow:
 ```swift
-ToastManager.shared.show("First message")      // Shows immediately
-ToastManager.shared.show("Second message")     // Queued
-ToastManager.shared.show("Third message")      // Queued
-// First dismisses after 3s, second shows, etc.
+// These will all show simultaneously (up to 3)
+ToastManager.shared.show("First message")      
+ToastManager.shared.show("Second message")     
+ToastManager.shared.show("Third message")      
+
+// Fourth will queue until a slot opens
+ToastManager.shared.show("Fourth message")     
+
+// Persistent toast takes a slot but won't auto-dismiss
+ToastManager.shared.show("Persistent", duration: .infinity, id: "persist")
 ```
 
 ## Visual Design

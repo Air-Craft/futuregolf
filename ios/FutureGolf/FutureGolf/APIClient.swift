@@ -3,6 +3,7 @@ import Foundation
 class APIClient {
     private let baseURL = Config.apiBaseURL
     private let session = URLSession.shared
+    private var activeTasks = Set<URLSessionTask>()
     
     func uploadAndAnalyzeVideo(url: URL) async -> AnalysisResult? {
         do {
@@ -121,6 +122,12 @@ class APIClient {
         }
         
         return nil
+    }
+    
+    /// Cancel all active network tasks
+    func cancelAllTasks() {
+        activeTasks.forEach { $0.cancel() }
+        activeTasks.removeAll()
     }
 }
 

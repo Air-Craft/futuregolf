@@ -70,6 +70,7 @@ class RecordingViewModel: NSObject, ObservableObject {
     var showProgressCircles = false
     var currentFrameRate: Double = 0.0  // Actual achieved frame rate for display
     var recordedVideoURL: URL?
+    var recordedAnalysisId: String?
     private var isProcessingEnabled = false  // Controls whether to process captured photos
     private var lastFrameCaptureTime: TimeInterval = 0  // Track last frame capture time
     private var lastFrameSendTime: TimeInterval = 0  // Track last frame send time
@@ -568,6 +569,10 @@ class RecordingViewModel: NSObject, ObservableObject {
     func startRecording() {
         guard currentPhase == .setup else { return }
         
+        // Log audio configuration for debugging
+        print("🎧 Current audio route at recording start:")
+        print(AudioRouteManager.shared.getCurrentRouteInfo())
+        
         currentPhase = .recording
         isRecording = true
         isProcessingEnabled = true  // Enable photo processing
@@ -629,9 +634,6 @@ class RecordingViewModel: NSObject, ObservableObject {
         // Stop voice recognition
         onDeviceSTT.stopListening()
         stopVoiceRecognition()
-        
-        // Stop any ongoing TTS immediately
-        ttsService.stopSpeaking()
         
         // Set phase to processing only after video URL is available
         // This will be done in the delegate callback
@@ -944,6 +946,11 @@ extension RecordingViewModel: AVCaptureFileOutputRecordingDelegate {
             print("Video recording finished successfully: \(outputFileURL)")
             Task { @MainActor in
                 self.recordedVideoURL = outputFileURL
+                
+                // Save analysis record and queue for processing
+                let processingService = VideoProcessingService.shared
+                self.recordedAnalysisId = processingService.queueVideo(videoURL: outputFileURL)
+                
                 // Now that we have the video URL, transition to processing
                 if self.currentPhase != .processing {
                     self.currentPhase = .processing

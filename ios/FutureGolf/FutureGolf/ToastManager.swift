@@ -4,13 +4,14 @@ import Combine
 // MARK: - Toast Model
 
 struct Toast: Identifiable {
-    let id = UUID()
+    let id: String
     var message: String
     var type: ToastType
     var duration: TimeInterval
     var showProgress: Bool
     var progress: Double?
     var progressLabel: String?
+    var isPersistent: Bool
     
     enum ToastType {
         case info
@@ -42,13 +43,16 @@ struct Toast: Identifiable {
          duration: TimeInterval = 3.0,
          showProgress: Bool = false,
          progress: Double? = nil,
-         progressLabel: String? = nil) {
+         progressLabel: String? = nil,
+         id: String? = nil) {
+        self.id = id ?? UUID().uuidString
         self.message = message
         self.type = type
         self.duration = duration
         self.showProgress = showProgress
         self.progress = progress
         self.progressLabel = progressLabel
+        self.isPersistent = duration == .infinity
     }
 }
 
@@ -58,42 +62,56 @@ struct Toast: Identifiable {
 class ToastManager: ObservableObject {
     static let shared = ToastManager()
     
-    @Published var currentToast: Toast?
+    @Published var activeToasts: [Toast] = []
     @Published var toastQueue: [Toast] = []
     
-    private var dismissTask: Task<Void, Never>?
-    private var progressToasts: [UUID: Toast] = [:]
+    private var dismissTasks: [String: Task<Void, Never>] = [:]
+    private var progressToasts: [String: Toast] = [:]
     
     private init() {}
     
     // MARK: - Public Methods
     
-    func show(_ message: String, type: Toast.ToastType = .info, duration: TimeInterval = 3.0) {
-        let toast = Toast(message: message, type: type, duration: duration)
+    func show(_ message: String, type: Toast.ToastType = .info, duration: TimeInterval = 3.0, id: String? = nil) {
+        // Check if a toast with this ID already exists
+        if let id = id, activeToasts.contains(where: { $0.id == id }) {
+            // Update existing toast
+            if let index = activeToasts.firstIndex(where: { $0.id == id }) {
+                withAnimation(.spring()) {
+                    activeToasts[index].message = message
+                    activeToasts[index].type = type
+                }
+            }
+            return
+        }
+        
+        let toast = Toast(message: message, type: type, duration: duration, id: id)
         enqueueToast(toast)
     }
     
-    func showProgress(_ label: String, progress: Double = 0.0) -> UUID {
+    func showProgress(_ label: String, progress: Double = 0.0) -> String {
+        let toastId = UUID().uuidString
         let toast = Toast(
             message: "",
             type: .info,
             duration: .infinity,
             showProgress: true,
             progress: progress,
-            progressLabel: label
+            progressLabel: label,
+            id: toastId
         )
         
         progressToasts[toast.id] = toast
         
-        // Always show progress toast immediately
+        // Add to active toasts
         withAnimation(.spring()) {
-            currentToast = toast
+            activeToasts.append(toast)
         }
         
         return toast.id
     }
     
-    func updateProgress(id: UUID, progress: Double, label: String? = nil) {
+    func updateProgress(id: String, progress: Double, label: String? = nil) {
         guard let existingToast = progressToasts[id] else { return }
         
         // Create updated toast keeping the same ID
@@ -105,35 +123,45 @@ class ToastManager: ObservableObject {
         
         progressToasts[id] = updatedToast
         
-        // Update current toast if it's the same one
-        if currentToast?.id == id {
+        // Update in active toasts
+        if let index = activeToasts.firstIndex(where: { $0.id == id }) {
             withAnimation(.easeInOut(duration: 0.2)) {
-                currentToast = updatedToast
+                activeToasts[index] = updatedToast
             }
         }
     }
     
-    func dismissProgress(id: UUID) {
+    func dismissProgress(id: String) {
         progressToasts.removeValue(forKey: id)
-        
-        if currentToast?.id == id {
-            currentToast = nil
-            showNextToast()
-        }
+        dismiss(id: id)
     }
     
     func dismissCurrent() {
-        dismissTask?.cancel()
-        withAnimation(.easeOut(duration: 0.3)) {
-            currentToast = nil
+        // Dismiss the oldest non-persistent toast
+        if let firstNonPersistent = activeToasts.first(where: { !$0.isPersistent }) {
+            dismiss(id: firstNonPersistent.id)
         }
+    }
+    
+    func dismiss(id: String) {
+        // Cancel any dismiss task
+        dismissTasks[id]?.cancel()
+        dismissTasks.removeValue(forKey: id)
+        
+        // Remove from active toasts
+        withAnimation(.easeOut(duration: 0.3)) {
+            activeToasts.removeAll { $0.id == id }
+        }
+        
+        // Show next queued toast if any
         showNextToast()
     }
     
     // MARK: - Private Methods
     
     private func enqueueToast(_ toast: Toast) {
-        if currentToast == nil {
+        // Allow up to 3 active toasts
+        if activeToasts.count < 3 {
             showToast(toast)
         } else {
             toastQueue.append(toast)
@@ -142,25 +170,25 @@ class ToastManager: ObservableObject {
     
     private func showToast(_ toast: Toast) {
         withAnimation(.spring()) {
-            currentToast = toast
+            activeToasts.append(toast)
         }
         
-        if toast.duration != .infinity {
-            dismissTask?.cancel()
-            dismissTask = Task {
+        if !toast.isPersistent {
+            let task = Task {
                 try? await Task.sleep(nanoseconds: UInt64(toast.duration * 1_000_000_000))
                 
                 if !Task.isCancelled {
                     await MainActor.run {
-                        self.dismissCurrent()
+                        self.dismiss(id: toast.id)
                     }
                 }
             }
+            dismissTasks[toast.id] = task
         }
     }
     
     private func showNextToast() {
-        guard !toastQueue.isEmpty else { return }
+        guard !toastQueue.isEmpty && activeToasts.count < 3 else { return }
         let nextToast = toastQueue.removeFirst()
         showToast(nextToast)
     }
@@ -239,51 +267,53 @@ struct ToastView: View {
 
 struct ToastOverlay: ViewModifier {
     @ObservedObject private var toastManager = ToastManager.shared
-    @State private var dragOffset: CGSize = .zero
+    @State private var dragOffsets: [String: CGFloat] = [:]
     
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .bottom) {
-                if let toast = toastManager.currentToast {
-                    ToastView(toast: toast)
-                        .padding(16) // Equal padding on all sides
-                        .offset(y: dragOffset.height)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .bottom).combined(with: .opacity),
-                            removal: .move(edge: .bottom).combined(with: .opacity)
-                        ))
-                        .gesture(
-                            DragGesture()
-                                .onChanged { value in
-                                    // Only allow downward swipes
-                                    if value.translation.height > 0 {
-                                        dragOffset = value.translation
-                                    }
-                                }
-                                .onEnded { value in
-                                    // If swiped down more than 50 points, dismiss
-                                    if value.translation.height > 50 {
-                                        withAnimation(.easeOut(duration: 0.2)) {
-                                            dragOffset.height = 300
-                                        }
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                            toastManager.dismissCurrent()
-                                            dragOffset = .zero
-                                        }
-                                    } else {
-                                        // Snap back
-                                        withAnimation(.spring()) {
-                                            dragOffset = .zero
+                VStack(spacing: 8) {
+                    ForEach(toastManager.activeToasts) { toast in
+                        ToastView(toast: toast)
+                            .offset(y: dragOffsets[toast.id] ?? 0)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .bottom).combined(with: .opacity),
+                                removal: .move(edge: .bottom).combined(with: .opacity)
+                            ))
+                            .gesture(
+                                DragGesture()
+                                    .onChanged { value in
+                                        // Only allow downward swipes
+                                        if value.translation.height > 0 {
+                                            dragOffsets[toast.id] = value.translation.height
                                         }
                                     }
+                                    .onEnded { value in
+                                        // If swiped down more than 50 points, dismiss
+                                        if value.translation.height > 50 {
+                                            withAnimation(.easeOut(duration: 0.2)) {
+                                                dragOffsets[toast.id] = 300
+                                            }
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                                toastManager.dismiss(id: toast.id)
+                                                dragOffsets.removeValue(forKey: toast.id)
+                                            }
+                                        } else {
+                                            // Snap back
+                                            withAnimation(.spring()) {
+                                                dragOffsets[toast.id] = 0
+                                            }
+                                        }
+                                    }
+                            )
+                            .onTapGesture {
+                                if !toast.isPersistent {
+                                    toastManager.dismiss(id: toast.id)
                                 }
-                        )
-                        .onTapGesture {
-                            if toast.duration != .infinity {
-                                toastManager.dismissCurrent()
                             }
-                        }
+                    }
                 }
+                .padding(16) // Equal padding on all sides
             }
     }
 }

@@ -18,6 +18,7 @@ struct SwingAnalysisView: View {
     @State private var showVideoPlayer = false
     @State private var expandedSection = false
     @State private var showProgressToast = false
+    @State private var showPreviousAnalyses = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -26,21 +27,46 @@ struct SwingAnalysisView: View {
         NavigationStack {
             ZStack {
                 // Background
-                Color.black.opacity(0.05)
+                Color(UIColor.systemBackground)
                     .ignoresSafeArea()
                 
-                if viewModel.isLoading {
-                    processingView
-                        .transition(.opacity.combined(with: .scale))
-                } else {
-                    analysisContentView
-                        .liquidGlassTransition(isVisible: !viewModel.isLoading)
+                Group {
+                    if viewModel.isOffline {
+                        offlineView
+                            .transition(.opacity.combined(with: .scale))
+                    } else if viewModel.isLoading {
+                        processingView
+                            .transition(.opacity.combined(with: .scale))
+                    } else if viewModel.analysisResult != nil {
+                        analysisContentView
+                            .liquidGlassTransition(isVisible: !viewModel.isLoading)
+                    } else {
+                        // Show offline view as default when no result yet
+                        offlineView
+                            .transition(.opacity.combined(with: .scale))
+                    }
+                }
+                .onAppear {
+                    print("🎬 SwingAnalysisView: View appeared")
+                    print("🎬 isOffline: \(viewModel.isOffline)")
+                    print("🎬 isLoading: \(viewModel.isLoading)")
+                    print("🎬 analysisResult: \(viewModel.analysisResult != nil)")
                 }
             }
-            .navigationTitle(viewModel.isLoading ? "Processing Swing" : "Swing Analysis")
+            .navigationTitle(viewModel.isOffline ? "Waiting for Connection" : viewModel.isLoading ? "Processing Swing" : "Swing Analysis")
             .navigationBarTitleDisplayMode(.inline)
-            .liquidGlassNavigationBar()
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        showPreviousAnalyses = true
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                            Text("Back")
+                        }
+                    }
+                }
+                
                 if !viewModel.isLoading {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button(action: {
@@ -53,9 +79,16 @@ struct SwingAnalysisView: View {
                 }
             }
             .onAppear {
+                print("🎬 SwingAnalysisView: onAppear triggered")
+                print("🎬 videoURL: \(videoURL)")
+                print("🎬 analysisId: \(analysisId ?? "nil")")
+                
+                // Always proceed - let the view model handle connectivity
                 if let id = analysisId {
+                    print("🎬 Loading existing analysis: \(id)")
                     viewModel.loadExistingAnalysis(id: id)
                 } else {
+                    print("🎬 Starting new analysis")
                     viewModel.startNewAnalysis(videoURL: videoURL)
                 }
             }
@@ -69,6 +102,7 @@ struct SwingAnalysisView: View {
                 if viewModel.isLoading {
                     showProgressToast = true
                 }
+                viewModel.cleanup()
             }
             .sheet(isPresented: $showVideoPlayer) {
                 if let result = viewModel.analysisResult {
@@ -97,21 +131,9 @@ struct SwingAnalysisView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            // Error View Overlay
-            .overlay {
-                if viewModel.showError {
-                    SwingAnalysisErrorView(
-                        error: NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: viewModel.errorMessage]),
-                        onRetry: {
-                            viewModel.showError = false
-                            if let id = analysisId {
-                                viewModel.loadExistingAnalysis(id: id)
-                            } else {
-                                viewModel.startNewAnalysis(videoURL: videoURL)
-                            }
-                        }
-                    )
-                    .transition(.opacity.combined(with: .scale))
+            .fullScreenCover(isPresented: $showPreviousAnalyses) {
+                NavigationStack {
+                    PreviousAnalysesView()
                 }
             }
         }
@@ -123,6 +145,69 @@ struct SwingAnalysisView: View {
             return 400
         }
         return UIDevice.current.orientation.isLandscape ? 200 : 300
+    }
+    
+    // MARK: - Offline View
+    private var offlineView: some View {
+        VStack(spacing: Spacing.extraLarge) {
+            // Video Thumbnail
+            ZStack {
+                if let thumbnail = viewModel.videoThumbnail {
+                    Image(uiImage: thumbnail)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxHeight: videoThumbnailHeight)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                } else {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Material.ultraThin)
+                        .frame(height: videoThumbnailHeight)
+                }
+                
+                // Offline indicator overlay
+                VStack(spacing: 16) {
+                    Image(systemName: "wifi.slash")
+                        .font(.system(size: 48))
+                        .foregroundColor(.white)
+                    
+                    Text("Waiting for Connection")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black.opacity(0.6))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+            .padding(.horizontal)
+            
+            // Progress Bar at 0
+            VStack(alignment: .leading, spacing: 8) {
+                ProgressView(value: 0.0)
+                    .tint(.gray)
+                    .scaleEffect(y: 2)
+                
+                Text("Waiting for connectivity...")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal)
+            
+            // Status Message
+            VStack(spacing: 8) {
+                Text("Your swing will be analyzed when connection is restored")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                
+                Text("We'll notify you when it's ready")
+                    .font(.caption)
+                    .foregroundColor(.secondary.opacity(0.8))
+            }
+            .padding(.horizontal)
+            
+            Spacer()
+        }
+        .padding(.vertical)
     }
     
     // MARK: - Processing View
@@ -142,7 +227,7 @@ struct SwingAnalysisView: View {
                         }
                 } else {
                     RoundedRectangle(cornerRadius: 16)
-                        .fill(Material.ultraThin)
+                        .fill(Color.gray.opacity(0.3))
                         .frame(height: videoThumbnailHeight)
                 }
                 
@@ -168,7 +253,7 @@ struct SwingAnalysisView: View {
                 
                 Text(viewModel.processingDetail)
                     .font(.caption)
-                    .foregroundColor(.glassSecondaryText)
+                    .foregroundColor(.secondary)
             }
             .padding(.horizontal)
             
@@ -181,14 +266,14 @@ struct SwingAnalysisView: View {
                             .foregroundColor(.glassText)
                         Text("Processing swing data...")
                             .font(.caption)
-                            .foregroundColor(.glassSecondaryText)
+                            .foregroundColor(.secondary)
                     }
                     
                     Spacer()
                     
                     Image(systemName: "chevron.down.circle.fill")
                         .font(.title2)
-                        .foregroundColor(.glassSecondaryText)
+                        .foregroundColor(.secondary)
                         .rotationEffect(.degrees(expandedSection ? 180 : 0))
                 }
                 .padding()
@@ -203,6 +288,7 @@ struct SwingAnalysisView: View {
             Spacer()
         }
         .padding(.top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     // MARK: - Analysis Content View
@@ -338,7 +424,7 @@ struct SwingAnalysisView: View {
                 
                 Text(viewModel.summaryText)
                     .font(.body)
-                    .foregroundColor(.glassSecondaryText)
+                    .foregroundColor(.secondary)
                     .lineSpacing(4)
             }
             .padding()
@@ -408,7 +494,7 @@ struct KeyMomentCard: View {
                 
                 Text(moment.feedback)
                     .font(.caption)
-                    .foregroundColor(.glassSecondaryText)
+                    .foregroundColor(.secondary)
                     .lineLimit(3)
             }
             .padding(.horizontal, 8)

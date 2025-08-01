@@ -17,7 +17,7 @@ class TTSCacheManager: ObservableObject {
     @Published var cacheWarmingProgress: Double = 0.0
     
     private var connectivityCallbackId: UUID?
-    private var progressToastId: UUID?
+    private var progressToastId: String?
     
     // MARK: - Initialization
     

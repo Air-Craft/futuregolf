@@ -17,6 +17,7 @@ class OnDeviceSTTService: NSObject, ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
+    private var audioRouteManager: AudioRouteManager?
     
     // Command detection
     private let startCommandPatterns = [
@@ -45,6 +46,10 @@ class OnDeviceSTTService: NSObject, ObservableObject {
         self.speechRecognizer = SFSpeechRecognizer(locale: Locale.current) ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
         super.init()
         
+        Task { @MainActor in
+            self.audioRouteManager = AudioRouteManager.shared
+        }
+        
         setupAvailability()
     }
     
@@ -59,9 +64,14 @@ class OnDeviceSTTService: NSObject, ObservableObject {
         }
         
         // Request microphone permission
-        let microphoneStatus = await withCheckedContinuation { continuation in
-            AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                continuation.resume(returning: granted)
+        let microphoneStatus: Bool
+        if #available(iOS 17.0, *) {
+            microphoneStatus = await AVAudioApplication.requestRecordPermission()
+        } else {
+            microphoneStatus = await withCheckedContinuation { continuation in
+                AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
             }
         }
         
@@ -141,10 +151,10 @@ class OnDeviceSTTService: NSObject, ObservableObject {
     }
     
     private func startRecognition() throws {
-        // Configure audio session for recording with playback compatibility
-        let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .allowBluetooth])
-        try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+        // Use AudioRouteManager to configure for recording
+        Task { @MainActor in
+            audioRouteManager?.configureForRecording()
+        }
         
         // Create recognition request
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
@@ -159,6 +169,16 @@ class OnDeviceSTTService: NSObject, ObservableObject {
         // Set up audio input
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+        
+        // Log input configuration
+        print("🎤 STT Audio input format: \(recordingFormat)")
+        print("🎤 STT Input node: \(inputNode)")
+        
+        // Ensure we're using the correct input
+        let session = AVAudioSession.sharedInstance()
+        if let preferredInput = session.preferredInput {
+            print("🎤 STT Preferred input: \(preferredInput.portName)")
+        }
         
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
             recognitionRequest.append(buffer)

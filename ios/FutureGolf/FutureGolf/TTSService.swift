@@ -15,6 +15,7 @@ class TTSService: NSObject, ObservableObject {
     
     // TTS Cache Manager
     let cacheManager = TTSCacheManager()
+    private var audioRouteManager: AudioRouteManager?
     
     // Fallback iOS TTS
     private let speechSynthesizer = AVSpeechSynthesizer()
@@ -22,21 +23,17 @@ class TTSService: NSObject, ObservableObject {
     
     private override init() {
         super.init()
-        configureAudioSession()
+        Task { @MainActor in
+            self.audioRouteManager = AudioRouteManager.shared
+            self.configureAudioSession()
+        }
     }
     
+    @MainActor
     private func configureAudioSession() {
-        do {
-            // Use playAndRecord to be compatible with STT that might be running
-            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: [.duckOthers, .defaultToSpeaker])
-            try AVAudioSession.sharedInstance().setActive(true, options: [])
-            print("🗣️ TTS: Audio session configured successfully")
-            print("🗣️ TTS: Audio session category: \(AVAudioSession.sharedInstance().category)")
-            print("🗣️ TTS: Audio session mode: \(AVAudioSession.sharedInstance().mode)")
-            print("🗣️ TTS: Audio session options: \(AVAudioSession.sharedInstance().categoryOptions)")
-        } catch {
-            print("🗣️ TTS: Failed to configure audio session: \(error)")
-        }
+        // Use AudioRouteManager to configure audio session
+        audioRouteManager?.configureForPlayback()
+        print("🗣️ TTS: Audio session configured via AudioRouteManager")
     }
     
     func speakText(_ text: String, completion: @escaping (Bool) -> Void = { _ in }) {
@@ -204,9 +201,10 @@ class TTSService: NSObject, ObservableObject {
         do {
             print("🗣️ TTS: Creating AVAudioPlayer with \(data.count) bytes of audio data")
             
-            // Reconfigure audio session for playback
-            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: [.duckOthers, .defaultToSpeaker])
-            try AVAudioSession.sharedInstance().setActive(true, options: [])
+            // Use AudioRouteManager to configure for playback
+            Task { @MainActor in
+                audioRouteManager?.configureForPlayback()
+            }
             
             audioPlayer = try AVAudioPlayer(data: data)
             audioPlayer?.volume = 1.0  // Maximum volume

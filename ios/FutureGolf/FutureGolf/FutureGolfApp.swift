@@ -19,11 +19,20 @@ struct FutureGolfApp: App {
         // Initialize connectivity monitoring
         _ = ConnectivityService.shared
         
+        // Initialize video processing service
+        _ = VideoProcessingService.shared
+        
+        // Initialize audio route manager
+        _ = AudioRouteManager.shared
+        
         // Test server connectivity at launch
         testServerConnection()
         
         // Start TTS cache warming in background
         warmTTSCache()
+        
+        // Process any pending video analyses
+        processPendingAnalyses()
     }
     
     var body: some Scene {
@@ -120,6 +129,31 @@ struct FutureGolfApp: App {
             
             // Start warming (will check connectivity internally)
             cacheManager.warmCache()
+        }
+    }
+    
+    private func processPendingAnalyses() {
+        print("🚀 APP LAUNCH: Checking for pending video analyses...")
+        
+        Task { @MainActor in
+            let processingService = VideoProcessingService.shared
+            let storageManager = AnalysisStorageManager.shared
+            
+            // Get pending analyses
+            let pendingAnalyses = storageManager.getPendingAnalyses()
+            print("🚀 Found \(pendingAnalyses.count) pending analyses")
+            
+            if !pendingAnalyses.isEmpty {
+                // Check connectivity
+                let isConnected = ConnectivityService.shared.isConnected
+                
+                if isConnected {
+                    print("🚀 Network available, starting processing...")
+                    processingService.processPendingAnalyses()
+                } else {
+                    print("🚀 No network connection, will process when connection restored")
+                }
+            }
         }
     }
 }

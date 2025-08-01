@@ -8,7 +8,7 @@ class SwingAnalysisViewModel: ObservableObject {
     // Processing State
     var isLoading = true
     var processingProgress: Double = 0.0
-    var processingStatus = "Uploading video"
+    var processingStatus = "Checking connection"
     var processingDetail = "Preparing for analysis..."
     
     // Analysis Data
@@ -27,19 +27,60 @@ class SwingAnalysisViewModel: ObservableObject {
     var showError = false
     var errorMessage = ""
     
+    // Offline state
+    var isOffline = false
+    var offlineMessage = "Waiting for connection"
+    
     private let apiClient = APIClient()
     private var progressTimer: Timer?
     var videoURL: URL?
-    private let storageManager = AnalysisStorageManager()
+    private let storageManager = AnalysisStorageManager.shared
+    private let connectivityService = ConnectivityService.shared
+    private let processingService = VideoProcessingService.shared
+    private var analysisId: String?
+    private var connectivityCallbackId: UUID?
+    private var connectivityCancellable: AnyCancellable?
     
     func startNewAnalysis(videoURL: URL) {
+        print("🎆 SwingAnalysisViewModel: startNewAnalysis called")
+        print("🎆 videoURL: \(videoURL)")
+        
         self.videoURL = videoURL
-        startProcessingSimulation()
+        
+        // Create analysis record
+        self.analysisId = storageManager.saveAnalysis(videoURL: videoURL, status: .pending)
+        print("🎆 Created analysis ID: \(self.analysisId ?? "nil")")
         
         // Generate thumbnail asynchronously
         Task {
             await generateThumbnailAsync(from: videoURL)
         }
+        
+        // Set up connectivity monitoring
+        setupConnectivityMonitoring()
+        
+        // Check connectivity
+        let isConnected = connectivityService.isConnected
+        print("🎆 Connectivity status: \(isConnected)")
+        
+        if !isConnected {
+            // Show offline state
+            print("🎆 Setting offline state")
+            isOffline = true
+            isLoading = false
+            processingStatus = "Waiting for connectivity"
+            processingDetail = "Your swing will be analyzed when connection is restored"
+            
+            // Show connectivity toast
+            ToastManager.shared.show("Waiting for connectivity...", type: .warning, duration: .infinity, id: "connectivity")
+            return
+        }
+        
+        // Connected - dismiss connectivity toast if shown
+        ToastManager.shared.dismiss(id: "connectivity")
+        
+        print("🎆 Starting processing simulation")
+        startProcessingSimulation()
         
         Task {
             await uploadAndAnalyzeVideo(url: videoURL)
@@ -47,22 +88,60 @@ class SwingAnalysisViewModel: ObservableObject {
     }
     
     func loadExistingAnalysis(id: String) {
+        print("🎆 SwingAnalysisViewModel: loadExistingAnalysis called")
+        print("🎆 Analysis ID: \(id)")
+        
+        self.analysisId = id
+        
+        // Set up connectivity monitoring
+        setupConnectivityMonitoring()
+        
         // Load from local storage
         Task {
-            if let analysis = await storageManager.loadAnalysis(id: id) {
-                self.analysisResult = analysis
-                updateDisplayData(from: analysis)
-                self.isLoading = false
+            if let storedAnalysis = storageManager.getAnalysis(id: id) {
+                print("🎆 Found stored analysis with status: \(storedAnalysis.status)")
+                self.videoURL = storedAnalysis.videoURL
                 
-                // Load video thumbnail if available
-                if let url = self.videoURL {
-                    Task {
-                        await generateThumbnailAsync(from: url)
+                // Generate thumbnail
+                Task {
+                    await generateThumbnailAsync(from: storedAnalysis.videoURL)
+                }
+                
+                switch storedAnalysis.status {
+                case .completed:
+                    // Show results
+                    if let result = storedAnalysis.analysisResult {
+                        self.analysisResult = result
+                        updateDisplayData(from: result)
+                        self.isLoading = false
                     }
+                    
+                case .pending, .failed:
+                    // Check connectivity and retry
+                    if connectivityService.isConnected {
+                        startProcessingSimulation()
+                        Task {
+                            await retryAnalysis(storedAnalysis)
+                        }
+                    } else {
+                        // Show offline state
+                        isOffline = true
+                        isLoading = false
+                        processingStatus = "Waiting for connection"
+                        processingDetail = "Your swing will be analyzed when connection is restored"
+                        ToastManager.shared.show("Waiting for connectivity...", type: .warning, duration: .infinity, id: "connectivity")
+                    }
+                    
+                case .uploading, .analyzing:
+                    // Show progress
+                    startProcessingSimulation()
+                    monitorAnalysisProgress(id: id)
                 }
             } else {
-                // Fallback to API
-                await fetchAnalysisFromServer(id: id)
+                // Analysis not found
+                showError = true
+                errorMessage = "Analysis not found"
+                isLoading = false
             }
         }
     }
@@ -71,22 +150,29 @@ class SwingAnalysisViewModel: ObservableObject {
         processingProgress = 0.0
         
         progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            
-            if self.processingProgress < 0.3 {
-                self.processingProgress += 0.01
-                self.processingStatus = "Uploading video"
-                self.processingDetail = "Uploading \(Int(self.processingProgress * 100 / 0.3))%"
-            } else if self.processingProgress < 0.98 {
-                self.processingProgress += 0.005
-                self.processingStatus = "Analyzing"
-                self.processingDetail = "Processing swing data..."
+            Task { @MainActor in
+                guard let self = self else { return }
+                
+                if self.processingProgress < 0.3 {
+                    self.processingProgress += 0.01
+                    self.processingStatus = "Uploading video"
+                    self.processingDetail = "Uploading \(Int(self.processingProgress * 100 / 0.3))%"
+                } else if self.processingProgress < 0.98 {
+                    self.processingProgress += 0.005
+                    self.processingStatus = "Analyzing"
+                    self.processingDetail = "Processing swing data..."
+                }
             }
         }
     }
     
     private func uploadAndAnalyzeVideo(url: URL) async {
         do {
+            // Update status to uploading
+            if let id = self.analysisId {
+                storageManager.updateStatus(id: id, status: .uploading)
+            }
+            
             // Upload video
             guard let result = await apiClient.uploadAndAnalyzeVideo(url: url) else {
                 throw NSError(domain: "SwingAnalysis", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to analyze video"])
@@ -109,8 +195,8 @@ class SwingAnalysisViewModel: ObservableObject {
                 await TTSService.shared.cacheManager.warmCache()
             }
             
-            // Save to local storage
-            await storageManager.saveAnalysis(result, videoURL: url)
+            // Update storage manager with results
+            storageManager.updateAnalysisResult(id: self.analysisId ?? "", result: result)
             
             // Play completion sound
             playCompletionSound()
@@ -250,9 +336,32 @@ class SwingAnalysisViewModel: ObservableObject {
     }
     
     private func generateThumbnailAsync(from url: URL) async {
-        if let thumbnail = await generateThumbnailAsync(from: url, at: 0) {
-            await MainActor.run {
-                self.videoThumbnail = thumbnail
+        // Get video duration and use midway point
+        let asset = AVURLAsset(url: url)
+        
+        do {
+            let duration = try await asset.load(.duration)
+            let durationSeconds = CMTimeGetSeconds(duration)
+            let midwayTime = durationSeconds / 2.0
+            
+            print("🎬 Generating thumbnail from midway point: \(midwayTime)s of \(durationSeconds)s")
+            if let thumbnail = await generateThumbnailAsync(from: url, at: midwayTime) {
+                await MainActor.run {
+                    self.videoThumbnail = thumbnail
+                    
+                    // Also save thumbnail to storage
+                    if let analysisId = self.analysisId {
+                        storageManager.updateThumbnail(id: analysisId, thumbnail: thumbnail)
+                    }
+                }
+            }
+        } catch {
+            // Fallback to first frame
+            print("🎬 Error getting duration, using first frame")
+            if let thumbnail = await generateThumbnailAsync(from: url, at: 0) {
+                await MainActor.run {
+                    self.videoThumbnail = thumbnail
+                }
             }
         }
     }
@@ -261,53 +370,113 @@ class SwingAnalysisViewModel: ObservableObject {
         // Play a system sound
         AudioServicesPlaySystemSound(1001) // Simple completion sound
     }
-}
-
-// MARK: - Storage Manager
-actor AnalysisStorageManager {
-    private let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-    private let analysisDirectory: URL
     
-    init() {
-        analysisDirectory = documentsDirectory.appendingPathComponent("SwingAnalyses")
-        try? FileManager.default.createDirectory(at: analysisDirectory, withIntermediateDirectories: true)
+    // MARK: - Retry and Monitoring Methods
+    
+    private func retryAnalysis(_ storedAnalysis: StoredAnalysis) async {
+        // The VideoProcessingService will handle the actual retry
+        // We just need to monitor the progress
+        monitorAnalysisProgress(id: storedAnalysis.id)
     }
     
-    func saveAnalysis(_ analysis: AnalysisResult, videoURL: URL) async {
-        // Save analysis JSON
-        let analysisFile = analysisDirectory.appendingPathComponent("\(analysis.id).json")
-        
-        do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            let data = try encoder.encode(analysis)
-            try data.write(to: analysisFile)
-            
-            // Copy video to local storage
-            let videoFile = analysisDirectory.appendingPathComponent("\(analysis.id).mp4")
-            try FileManager.default.copyItem(at: videoURL, to: videoFile)
-            
-        } catch {
-            print("Error saving analysis: \(error)")
+    private func monitorAnalysisProgress(id: String) {
+        // Monitor the analysis progress
+        Task {
+            while isLoading {
+                if let analysis = storageManager.getAnalysis(id: id) {
+                    switch analysis.status {
+                    case .completed:
+                        if let result = analysis.analysisResult {
+                            self.analysisResult = result
+                            updateDisplayData(from: result)
+                            generateKeyMoments(from: result)
+                            
+                            // Pre-cache TTS phrases
+                            TTSPhraseManager.shared.registerAnalysisPhrases(from: result)
+                            Task {
+                                await TTSService.shared.cacheManager.warmCache()
+                            }
+                            
+                            withAnimation(.liquidGlassSpring) {
+                                self.isLoading = false
+                            }
+                        }
+                        progressTimer?.invalidate()
+                        return
+                        
+                    case .failed:
+                        progressTimer?.invalidate()
+                        showError = true
+                        errorMessage = analysis.lastError ?? "Analysis failed"
+                        isLoading = false
+                        return
+                        
+                    case .uploading:
+                        processingStatus = "Uploading video"
+                        processingProgress = analysis.uploadProgress * 0.3
+                        
+                    case .analyzing:
+                        processingStatus = "Analyzing"
+                        processingProgress = 0.3 + (0.7 * min(processingProgress, 0.98))
+                        
+                    case .pending:
+                        // Still waiting
+                        break
+                    }
+                }
+                
+                // Check every second
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
         }
     }
     
-    func loadAnalysis(id: String) async -> AnalysisResult? {
-        let analysisFile = analysisDirectory.appendingPathComponent("\(id).json")
-        
-        do {
-            let data = try Data(contentsOf: analysisFile)
-            let decoder = JSONDecoder()
-            return try decoder.decode(AnalysisResult.self, from: data)
-        } catch {
-            print("Error loading analysis: \(error)")
-            return nil
-        }
+    // MARK: - Connectivity Monitoring
+    
+    private func setupConnectivityMonitoring() {
+        // Monitor connectivity changes
+        connectivityCancellable = connectivityService.$isConnected
+            .removeDuplicates()
+            .sink { [weak self] isConnected in
+                guard let self = self else { return }
+                
+                if isConnected {
+                    // Connected - dismiss waiting toast
+                    ToastManager.shared.dismiss(id: "connectivity")
+                    
+                    // If we were offline and waiting, start processing
+                    if self.isOffline {
+                        self.isOffline = false
+                        ToastManager.shared.show("Connection restored", type: .success)
+                        
+                        // If we have a pending analysis, start processing
+                        if let analysisId = self.analysisId,
+                           let analysis = self.storageManager.getAnalysis(id: analysisId),
+                           (analysis.status == .pending || analysis.status == .failed) {
+                            self.startProcessingSimulation()
+                            Task {
+                                await self.retryAnalysis(analysis)
+                            }
+                        }
+                    }
+                } else {
+                    // Disconnected - show waiting toast if we need connectivity
+                    if self.isLoading && !self.isOffline {
+                        self.isOffline = true
+                        self.isLoading = false
+                        self.processingStatus = "Waiting for connectivity"
+                        self.processingDetail = "Your swing will be analyzed when connection is restored"
+                        ToastManager.shared.show("Waiting for connectivity...", type: .warning, duration: .infinity, id: "connectivity")
+                    }
+                }
+            }
     }
     
-    func getVideoURL(for analysisId: String) -> URL? {
-        let videoFile = analysisDirectory.appendingPathComponent("\(analysisId).mp4")
-        return FileManager.default.fileExists(atPath: videoFile.path) ? videoFile : nil
+    func cleanup() {
+        connectivityCancellable?.cancel()
+        if let callbackId = connectivityCallbackId {
+            connectivityService.removeCallback(callbackId)
+        }
     }
 }
 

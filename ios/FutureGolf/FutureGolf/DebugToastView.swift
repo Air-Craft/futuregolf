@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct DebugToastView: View {
-    @State private var progressToastId: UUID?
+    @State private var progressToastId: String?
     @State private var progress: Double = 0.0
     
     var body: some View {

@@ -8,6 +8,7 @@ struct RecordingScreen: View {
     @State private var cameraPreview: AVCaptureVideoPreviewLayer?
     @State private var showSwingAnalysis = false
     @State private var recordedVideoURL: URL?
+    @State private var recordedAnalysisId: String?
     @State private var deviceOrientation = UIDevice.current.orientation
     @State private var currentZoom: CGFloat = 1.0
     @State private var showZoomIndicator = false
@@ -93,17 +94,38 @@ struct RecordingScreen: View {
             }
         }
         .onChange(of: viewModel.recordedVideoURL) { oldValue, newValue in
+            print("🎹 RecordingScreen: recordedVideoURL changed")
+            print("🎹 oldValue: \(oldValue?.absoluteString ?? "nil")")
+            print("🎹 newValue: \(newValue?.absoluteString ?? "nil")")
+            print("🎹 currentPhase: \(viewModel.currentPhase)")
+            
             if let videoURL = newValue, viewModel.currentPhase == .processing {
-                recordedVideoURL = videoURL
-                // Stop any ongoing TTS before transitioning
-                viewModel.ttsService.stopSpeaking()
-                showSwingAnalysis = true
+                // Set values and show
+                self.recordedVideoURL = videoURL
+                self.recordedAnalysisId = viewModel.recordedAnalysisId
+                print("🎹 Set recordedVideoURL: \(videoURL.absoluteString)")
+                print("🎹 Set recordedAnalysisId: \(viewModel.recordedAnalysisId ?? "nil")")
+                
+                // Ensure we have the URL before navigating
+                if self.recordedVideoURL != nil {
+                    showSwingAnalysis = true
+                } else {
+                    print("🎹 ERROR: recordedVideoURL is nil after setting!")
+                }
             }
         }
         .fullScreenCover(isPresented: $showSwingAnalysis) {
-            if let videoURL = recordedVideoURL {
-                SwingAnalysisView(videoURL: videoURL, analysisId: nil)
-            }
+            // Use a default URL if somehow it's nil (shouldn't happen)
+            let videoURL = recordedVideoURL ?? URL(fileURLWithPath: "/tmp/placeholder.mp4")
+            SwingAnalysisView(videoURL: videoURL, analysisId: recordedAnalysisId)
+                .onAppear {
+                    print("🎹 SwingAnalysisView presented")
+                    print("🎹 - videoURL: \(videoURL.absoluteString)")
+                    print("🎹 - analysisId: \(recordedAnalysisId ?? "nil")")
+                    if recordedVideoURL == nil {
+                        print("🎹 WARNING: Using placeholder URL because recordedVideoURL was nil!")
+                    }
+                }
         }
         .confirmationDialog("Cancel Recording", isPresented: $showCancelConfirmation) {
             Button("Cancel Recording", role: .destructive) {
