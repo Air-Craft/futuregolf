@@ -338,9 +338,15 @@ struct RecordingScreen: View {
         Task {
             do {
                 try await viewModel.setupCamera()
-                try await viewModel.startVoiceRecognition()
-                // Play welcome message once setup is complete
-                viewModel.ttsService.speakText("Alright. Get yourself into a position where we can see your whole swing, and let me know when you're ready.")
+                
+                // Play welcome message first, THEN start voice recognition
+                // This prevents the TTS from triggering voice commands
+                viewModel.ttsService.speakText("Alright. Get yourself into a position where we can see your whole swing, and let me know when you're ready.") { [weak self] _ in
+                    // Start voice recognition after TTS completes
+                    Task {
+                        try? await self?.viewModel.startVoiceRecognition()
+                    }
+                }
             } catch {
                 handleSetupError(error)
             }

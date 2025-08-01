@@ -602,8 +602,14 @@ class RecordingViewModel: NSObject, ObservableObject {
         startStillCaptureTimer()
         startTimeoutTimer()
         
+        // Temporarily stop listening for voice commands while TTS is playing
+        onDeviceSTT.stopListening()
+        
         // Play TTS confirmation
-        ttsService.speakText("Great. I'm now recording. Begin swinging when you're ready.")
+        ttsService.speakText("Great. I'm now recording. Begin swinging when you're ready.") { [weak self] _ in
+            // Resume listening after TTS completes
+            self?.onDeviceSTT.startListening()
+        }
         
         onRecordingStarted?()
     }
@@ -766,7 +772,11 @@ class RecordingViewModel: NSObject, ObservableObject {
         
         // Provide audio feedback
         if swingCount == 1 {
-            ttsService.speakText("Great. Take another when you're ready.")
+            // Temporarily pause voice recognition during TTS
+            onDeviceSTT.stopListening()
+            ttsService.speakText("Great. Take another when you're ready.") { [weak self] _ in
+                self?.onDeviceSTT.startListening()
+            }
         } else if swingCount == 2 {
             ttsService.speakText("Ok one more to go.")
         } else if swingCount >= targetSwingCount {
