@@ -730,6 +730,11 @@ class RecordingViewModel: NSObject, ObservableObject {
     // MARK: - Still Capture Methods
     
     func captureStillForAnalysis() {
+        // TEMPORARILY DISABLED - No frame capture or API calls
+        print("🚫 Frame capture and API sending temporarily disabled")
+        return
+        
+        /*
         guard currentPhase == .recording,
               isProcessingEnabled else { 
             print("🛑 Skipping frame capture request - not in recording phase or processing disabled")
@@ -738,6 +743,7 @@ class RecordingViewModel: NSObject, ObservableObject {
         
         // Set flag to capture next video frame
         shouldCaptureNextFrame = true
+        */
     }
     
     // MARK: - Swing Detection Methods
@@ -837,6 +843,11 @@ class RecordingViewModel: NSObject, ObservableObject {
     private var stillSequenceNumber = 0
     
     private func analyzeStillForSwing(_ image: UIImage) async throws -> Bool {
+        // TEMPORARILY DISABLED - Always return false to disable swing detection
+        print("🚫 Swing detection temporarily disabled - returning false")
+        return false
+        
+        /*
         // Check if task is cancelled
         try Task.checkCancellation()
         
@@ -861,6 +872,7 @@ class RecordingViewModel: NSObject, ObservableObject {
         
         // Return true if swing detected with high confidence
         return response.swingDetected && response.confidence > 0.7
+        */
     }
     
     private func compressImage(_ image: UIImage) -> Data? {
