@@ -96,7 +96,7 @@ class TTSService: NSObject, ObservableObject {
                     }
                 } else {
                     // Debug: Check cache status when cache miss occurs
-                    if TTSPhrases.isCacheable(text: text) {
+                    if TTSPhraseManager.shared.isCacheable(text: text) {
                         print("🗣️💾 TTS: Cache miss for cacheable phrase!")
                         await MainActor.run {
                             self.cacheManager.debugListCachedFiles()
@@ -104,7 +104,7 @@ class TTSService: NSObject, ObservableObject {
                     }
                     // Check if this is a cacheable phrase but user is going too fast
                     let isCacheWarming = await MainActor.run { self.cacheManager.isCacheWarming }
-                    if TTSPhrases.isCacheable(text: text) && isCacheWarming {
+                    if TTSPhraseManager.shared.isCacheable(text: text) && isCacheWarming {
                         print("🗣️💾 TTS: ⚠️ Cache still warming for cacheable phrase, skipping playback to avoid delay")
                         completion(false)
                         self.isProcessingQueue = false

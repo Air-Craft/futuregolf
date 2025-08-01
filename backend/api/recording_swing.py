@@ -11,7 +11,7 @@ import json
 import asyncio
 import logging
 from datetime import datetime
-import openai
+import google.generativeai as genai
 import os
 from dotenv import load_dotenv
 import base64
@@ -28,8 +28,9 @@ router = APIRouter(prefix="/api/v1/recording", tags=["recording"])
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# OpenAI client for LLM processing
-openai_client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Configure Google Gemini
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+gemini_model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 class SwingDetectionRequest(BaseModel):
     """Request model for swing detection"""
@@ -244,29 +245,34 @@ Example responses:
 """
 
     try:
-        # Build messages with text and images
-        messages = [
-            {
-                "role": "system", 
-                "content": "You are a golf swing analysis expert. Analyze image sequences to detect complete golf swings. Respond only with valid JSON."
-            },
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    *images_for_analysis
-                ]
-            }
-        ]
+        # Prepare system prompt for Gemini
+        system_prompt = "You are a golf swing analysis expert. Analyze image sequences to detect complete golf swings. Respond only with valid JSON.\n\n"
+        full_prompt = system_prompt + prompt
         
-        response = await openai_client.chat.completions.create(
-            model="gpt-4o",  # Using vision model
-            messages=messages,
+        # Convert images for Gemini format
+        gemini_images = []
+        for img in images_for_analysis:
+            img_data = img["image_url"]["url"].split(",")[1]  # Get base64 part
+            img_bytes = base64.b64decode(img_data)
+            gemini_images.append(Image.open(BytesIO(img_bytes)))
+        
+        # Generate content with Gemini
+        generation_config = genai.types.GenerationConfig(
             temperature=0.1,
-            max_tokens=300
+            max_output_tokens=300,
         )
         
-        result_text = response.choices[0].message.content.strip()
+        # Build content for Gemini
+        content_parts = [prompt]
+        content_parts.extend(gemini_images)
+        
+        response = await asyncio.to_thread(
+            gemini_model.generate_content,
+            content_parts,
+            generation_config=generation_config
+        )
+        
+        result_text = response.text.strip()
         
         # Parse JSON response
         try:

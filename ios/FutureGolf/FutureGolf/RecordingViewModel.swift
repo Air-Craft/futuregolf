@@ -72,8 +72,10 @@ class RecordingViewModel: NSObject, ObservableObject {
     var recordedVideoURL: URL?
     private var isProcessingEnabled = false  // Controls whether to process captured photos
     private var lastFrameCaptureTime: TimeInterval = 0  // Track last frame capture time
+    private var lastFrameSendTime: TimeInterval = 0  // Track last frame send time
     private var shouldCaptureNextFrame = false  // Flag to capture next frame
     private var activeAnalysisTasks = Set<Task<Void, Never>>()  // Track active analysis tasks
+    private var capturedFramesBuffer: [UIImage] = []  // Buffer for captured frames
     
     // MARK: - Camera Properties  
     var preferredFrameRate: Double { CameraConfiguration.preferredFrameRate }
@@ -81,10 +83,11 @@ class RecordingViewModel: NSObject, ObservableObject {
     var minFrameRate: Double { CameraConfiguration.minFrameRate }
     var resolution: AVCaptureSession.Preset { CameraConfiguration.resolution }
     var videoFormat: AVFileType { CameraConfiguration.videoFormat }
-    var isPortraitMode = true
+    var deviceOrientation: UIDeviceOrientation = .portrait
     var isAutoFocusEnabled = true
     var focusMode: AVCaptureDevice.FocusMode = .continuousAutoFocus
-    var stillCaptureInterval: TimeInterval { CameraConfiguration.stillCaptureInterval }
+    var stillCaptureInterval: TimeInterval = 0.35 // Capture every 0.35s as requested
+    var frameUploadInterval: TimeInterval = 1.4 // Send frames every 1.4s
     var recordingTimeout: TimeInterval { Config.recordingTimeout }
     
     // MARK: - Configuration
@@ -409,6 +412,75 @@ class RecordingViewModel: NSObject, ObservableObject {
         return dimensions.width >= 1920 && dimensions.height >= 1080
     }
     
+    // MARK: - Orientation Handling
+    
+    private func updateVideoOrientation(for connection: AVCaptureConnection) {
+        if #available(iOS 17.0, *) {
+            guard connection.isVideoRotationAngleSupported(0) else {
+                return
+            }
+        } else {
+            guard connection.isVideoOrientationSupported else {
+                return
+            }
+        }
+        
+        let orientation = deviceOrientation
+        
+        if #available(iOS 17.0, *) {
+            let angle: CGFloat
+            switch orientation {
+            case .portrait:
+                angle = 90
+            case .portraitUpsideDown:
+                angle = 270
+            case .landscapeLeft:
+                angle = 0
+            case .landscapeRight:
+                angle = 180
+            default:
+                angle = 90 // Default to portrait
+            }
+            
+            if connection.isVideoRotationAngleSupported(angle) {
+                connection.videoRotationAngle = angle
+            }
+        } else {
+            let videoOrientation: AVCaptureVideoOrientation
+            switch orientation {
+            case .portrait:
+                videoOrientation = .portrait
+            case .portraitUpsideDown:
+                videoOrientation = .portraitUpsideDown
+            case .landscapeLeft:
+                videoOrientation = .landscapeRight // Note: these are swapped
+            case .landscapeRight:
+                videoOrientation = .landscapeLeft  // Note: these are swapped
+            default:
+                videoOrientation = .portrait
+            }
+            
+            connection.videoOrientation = videoOrientation
+        }
+    }
+    
+    func updateOrientation(_ orientation: UIDeviceOrientation) {
+        guard orientation != .unknown && orientation != .faceUp && orientation != .faceDown else {
+            return
+        }
+        
+        deviceOrientation = orientation
+        
+        // Update all video connections
+        if let videoConnection = videoOutput?.connection(with: .video) {
+            updateVideoOrientation(for: videoConnection)
+        }
+        
+        if let dataConnection = videoDataOutput?.connection(with: .video) {
+            updateVideoOrientation(for: dataConnection)
+        }
+    }
+    
     private func setupVideoOutput() {
         guard let session = captureSession else { return }
         
@@ -423,16 +495,8 @@ class RecordingViewModel: NSObject, ObservableObject {
                     connection.preferredVideoStabilizationMode = .auto
                 }
                 
-                // Set video orientation for portrait mode  
-                if #available(iOS 17.0, *) {
-                    if connection.isVideoRotationAngleSupported(90) {
-                        connection.videoRotationAngle = 90 // Portrait mode
-                    }
-                } else {
-                    if connection.isVideoOrientationSupported {
-                        connection.videoOrientation = .portrait
-                    }
-                }
+                // Set video orientation based on device orientation
+                updateVideoOrientation(for: connection)
             }
         }
     }
@@ -459,16 +523,8 @@ class RecordingViewModel: NSObject, ObservableObject {
                 
                 // Configure connection
                 if let connection = output.connection(with: .video) {
-                    // Set video orientation for portrait mode  
-                    if #available(iOS 17.0, *) {
-                        if connection.isVideoRotationAngleSupported(90) {
-                            connection.videoRotationAngle = 90 // Portrait mode
-                        }
-                    } else {
-                        if connection.isVideoOrientationSupported {
-                            connection.videoOrientation = .portrait
-                        }
-                    }
+                    // Set video orientation based on device orientation
+                    updateVideoOrientation(for: connection)
                 }
             }
         }
@@ -489,6 +545,24 @@ class RecordingViewModel: NSObject, ObservableObject {
         isLeftHandedMode.toggle()
     }
     
+    func setZoomLevel(_ zoom: CGFloat) {
+        guard let device = currentCamera else { return }
+        
+        do {
+            try device.lockForConfiguration()
+            
+            // Calculate the zoom factor
+            let maxZoom = min(device.activeFormat.videoMaxZoomFactor, 4.0)
+            let scaledZoom = 1.0 + (1.0 - zoom) * (maxZoom - 1.0)
+            
+            device.videoZoomFactor = scaledZoom
+            
+            device.unlockForConfiguration()
+        } catch {
+            print("Error setting zoom level: \(error)")
+        }
+    }
+    
     // MARK: - Recording Control Methods
     
     func startRecording() {
@@ -503,6 +577,8 @@ class RecordingViewModel: NSObject, ObservableObject {
         swingCount = 0
         stillSequenceNumber = 0  // Reset sequence number
         lastFrameCaptureTime = 0  // Reset last capture time
+        lastFrameSendTime = 0  // Reset last send time
+        capturedFramesBuffer.removeAll()  // Clear buffer
         
         // Reset progress circles
         for i in 0..<progressCircles.count {
@@ -553,6 +629,9 @@ class RecordingViewModel: NSObject, ObservableObject {
         // Stop voice recognition
         onDeviceSTT.stopListening()
         stopVoiceRecognition()
+        
+        // Stop any ongoing TTS immediately
+        ttsService.stopSpeaking()
         
         // Set phase to processing only after video URL is available
         // This will be done in the delegate callback
@@ -690,6 +769,27 @@ class RecordingViewModel: NSObject, ObservableObject {
             return 
         }
         
+        // Add to buffer
+        capturedFramesBuffer.append(image)
+        
+        // Check if it's time to send (every 1.4s)
+        let currentTime = recordingTime
+        let timeSinceLastSend = currentTime - lastFrameSendTime
+        
+        guard timeSinceLastSend >= frameUploadInterval else {
+            print("📸 Frame captured but not sending yet (time since last send: \(timeSinceLastSend)s)")
+            return
+        }
+        
+        // Get the most recent frame from buffer
+        guard let frameToSend = capturedFramesBuffer.last else { return }
+        
+        // Clear buffer and update send time
+        capturedFramesBuffer.removeAll()
+        lastFrameSendTime = currentTime
+        
+        print("📤 Sending frame for analysis (buffer had \(capturedFramesBuffer.count + 1) frames)")
+        
         // Send to server for swing detection
         let task = Task { [weak self] in
             guard let self = self else { return }
@@ -701,7 +801,7 @@ class RecordingViewModel: NSObject, ObservableObject {
                     return
                 }
                 
-                let isSwingDetected = try await self.analyzeStillForSwing(image)
+                let isSwingDetected = try await self.analyzeStillForSwing(frameToSend)
                 
                 // Check one more time before processing result
                 await MainActor.run {
@@ -764,10 +864,10 @@ class RecordingViewModel: NSObject, ObservableObject {
     }
     
     private func compressImage(_ image: UIImage) -> Data? {
-        // Resize to smaller size for faster processing
-        let targetSize = CGSize(width: 300, height: 400)
+        // Resize to much smaller size for faster processing as requested
+        let targetSize = CGSize(width: 150, height: 200)
         let resizedImage = image.resized(to: targetSize)
-        return resizedImage?.jpegData(compressionQuality: 0.7)
+        return resizedImage?.jpegData(compressionQuality: 0.6)
     }
     
     // MARK: - Error Handling

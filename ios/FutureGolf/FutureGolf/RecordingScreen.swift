@@ -8,6 +8,9 @@ struct RecordingScreen: View {
     @State private var cameraPreview: AVCaptureVideoPreviewLayer?
     @State private var showSwingAnalysis = false
     @State private var recordedVideoURL: URL?
+    @State private var deviceOrientation = UIDevice.current.orientation
+    @State private var currentZoom: CGFloat = 1.0
+    @State private var showZoomIndicator = false
     
     var body: some View {
         ZStack {
@@ -15,6 +18,17 @@ struct RecordingScreen: View {
             CameraPreviewView(viewModel: viewModel)
                 .ignoresSafeArea(.all)
                 .accessibilityIdentifier("CameraPreview")
+                .gesture(
+                    MagnificationGesture()
+                        .onChanged { value in
+                            handleZoomGesture(value)
+                        }
+                        .onEnded { _ in
+                            withAnimation(.easeOut(duration: 2)) {
+                                showZoomIndicator = false
+                            }
+                        }
+                )
             
             // Main UI Overlay
             VStack(spacing: 0) {
@@ -47,18 +61,42 @@ struct RecordingScreen: View {
                 }
                 .padding(.horizontal)
             }
+            
+            // Zoom Indicator
+            if showZoomIndicator {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        ZoomIndicatorView(zoomLevel: currentZoom)
+                            .transition(.opacity.combined(with: .scale))
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 100)
+                }
+            }
         }
         .navigationBarHidden(true)
         .preferredColorScheme(.dark) // Better visibility over camera feed
         .onAppear {
             setupRecordingScreen()
+            setupOrientationObserver()
         }
         .onDisappear {
             viewModel.cleanup()
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            let newOrientation = UIDevice.current.orientation
+            if newOrientation != deviceOrientation {
+                deviceOrientation = newOrientation
+                viewModel.updateOrientation(newOrientation)
+            }
+        }
         .onChange(of: viewModel.recordedVideoURL) { oldValue, newValue in
             if let videoURL = newValue, viewModel.currentPhase == .processing {
                 recordedVideoURL = videoURL
+                // Stop any ongoing TTS before transitioning
+                viewModel.ttsService.stopSpeaking()
                 showSwingAnalysis = true
             }
         }
@@ -185,118 +223,9 @@ struct RecordingScreen: View {
             .liquidGlassBackground(intensity: .medium, cornerRadius: 16)
             .padding(.horizontal)
             
-            // Left-handed Mode Toggle
-            Button(action: {
-                withAnimation(.spring(response: 0.3)) {
-                    viewModel.toggleLeftHandedMode()
-                }
-                LiquidGlassHaptics.impact(.light)
-            }) {
-                HStack {
-                    Image(systemName: viewModel.isLeftHandedMode ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                    Text("Left-Handed Mode")
-                        .font(.headline)
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(.ultraThinMaterial, in: Capsule())
-            }
-            .accessibilityIdentifier("Left-Handed Mode")
-            .accessibilityLabel("Toggle left-handed mode for positioning indicator")
+            // Removed left-handed mode toggle as requested
             
-            #if DEBUG
-            // Debug buttons for testing cache
-            VStack(spacing: 10) {
-                Button("Debug: Force Cache Warm") {
-                    print("🐛 DEBUG: Forcing cache warm...")
-                    TTSService.shared.cacheManager.warmCache()
-                }
-                .font(.caption)
-                .foregroundColor(.orange)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial, in: Capsule())
-                
-                Button("Debug: List Cache") {
-                    print("🐛 DEBUG: Listing cache contents...")
-                    TTSService.shared.cacheManager.debugListCachedFiles()
-                }
-                .font(.caption)
-                .foregroundColor(.orange)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial, in: Capsule())
-                
-                Button("Debug: Test TTS Server") {
-                    print("🐛 DEBUG: Testing TTS server...")
-                    Task {
-                        // First test basic connectivity
-                        print("🐛 DEBUG: Server URL: \(Config.serverBaseURL)")
-                        
-                        do {
-                            // Test health endpoint first
-                            let healthURL = URL(string: "\(Config.serverBaseURL)/health")!
-                            print("🐛 DEBUG: Testing health endpoint: \(healthURL)")
-                            
-                            var healthRequest = URLRequest(url: healthURL)
-                            healthRequest.timeoutInterval = Config.healthCheckTimeout
-                            
-                            let (healthData, healthResponse) = try await URLSession.shared.data(for: healthRequest)
-                            
-                            if let httpResponse = healthResponse as? HTTPURLResponse {
-                                print("🐛 DEBUG: Health check - Status: \(httpResponse.statusCode)")
-                                if let responseString = String(data: healthData, encoding: .utf8) {
-                                    print("🐛 DEBUG: Health response: \(responseString)")
-                                }
-                            }
-                            
-                            // Then test TTS endpoint
-                            let testPhrase = "Test connection"
-                            let urlString = "\(Config.serverBaseURL)/api/v1/tts/coaching"
-                            print("🐛 DEBUG: Testing TTS URL: \(urlString)")
-                            
-                            guard let url = URL(string: urlString) else {
-                                print("🐛 DEBUG: Invalid URL")
-                                return
-                            }
-                            
-                            let requestBody = ["text": testPhrase, "voice": "onyx", "model": "tts-1-hd", "speed": 0.9]
-                            var request = URLRequest(url: url)
-                            request.httpMethod = "POST"
-                            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-                            request.timeoutInterval = Config.ttsSynthesisTimeout
-                            
-                            let (data, response) = try await URLSession.shared.data(for: request)
-                            
-                            if let httpResponse = response as? HTTPURLResponse {
-                                print("🐛 DEBUG: TTS Server Response: \(httpResponse.statusCode)")
-                                print("🐛 DEBUG: Data size: \(data.count) bytes")
-                                print("🐛 DEBUG: ✅ Server is working!")
-                            }
-                        } catch let error as URLError {
-                            print("🐛 DEBUG: Network Error Code: \(error.code.rawValue)")
-                            print("🐛 DEBUG: Network Error: \(error.localizedDescription)")
-                            print("🐛 DEBUG: ❌ Cannot reach server at \(Config.serverBaseURL)")
-                            print("🐛 DEBUG: Check that:")
-                            print("🐛 DEBUG:   1. Backend server is running")
-                            print("🐛 DEBUG:   2. IP address \(Config.serverBaseURL) is correct")
-                            print("🐛 DEBUG:   3. Device is on same network as server")
-                        } catch {
-                            print("🐛 DEBUG: Unexpected Error: \(error)")
-                        }
-                    }
-                }
-                .font(.caption)
-                .foregroundColor(.orange)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial, in: Capsule())
-            }
-            .padding(.top, 20)
-            #endif
+            // Debug buttons moved to debug panel
         }
     }
     
@@ -414,6 +343,15 @@ struct RecordingScreen: View {
         }
     }
     
+    private func setupOrientationObserver() {
+        // Enable orientation changes
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        
+        // Set initial orientation
+        deviceOrientation = UIDevice.current.orientation
+        viewModel.updateOrientation(deviceOrientation)
+    }
+    
     private func retrySetup() async {
         viewModel.currentPhase = .setup
         viewModel.errorType = nil
@@ -438,6 +376,23 @@ struct RecordingScreen: View {
         let seconds = Int(time) % 60
         let milliseconds = Int((time.truncatingRemainder(dividingBy: 1)) * 100)
         return String(format: "%02d:%02d.%02d", minutes, seconds, milliseconds)
+    }
+    
+    private func handleZoomGesture(_ value: CGFloat) {
+        // Only allow zoom out (value < 1.0)
+        if value < 1.0 {
+            let newZoom = currentZoom * value
+            
+            // Limit zoom range from 0.5x to 1.0x
+            if newZoom >= 0.5 && newZoom <= 1.0 {
+                currentZoom = newZoom
+                viewModel.setZoomLevel(currentZoom)
+                
+                withAnimation(.easeIn(duration: 0.1)) {
+                    showZoomIndicator = true
+                }
+            }
+        }
     }
 }
 
@@ -584,8 +539,8 @@ struct CameraPreviewView: UIViewRepresentable {
             newPreviewLayer.videoGravity = .resizeAspectFill
             newPreviewLayer.frame = view.bounds
             
-            // Set background color for debugging
-            newPreviewLayer.backgroundColor = UIColor.red.cgColor
+            // Set black background to prevent flash
+            newPreviewLayer.backgroundColor = UIColor.black.cgColor
             
             view.layer.addSublayer(newPreviewLayer)
             previewLayer = newPreviewLayer
@@ -599,14 +554,9 @@ struct CameraPreviewView: UIViewRepresentable {
                     session.startRunning()
                     DispatchQueue.main.async {
                         print("🐛 CameraPreviewCoordinator: Capture session started successfully")
-                        // Remove red background once session is running
-                        newPreviewLayer.backgroundColor = UIColor.clear.cgColor
                     }
                 } else {
                     print("🐛 CameraPreviewCoordinator: Capture session already running")
-                    DispatchQueue.main.async {
-                        newPreviewLayer.backgroundColor = UIColor.clear.cgColor
-                    }
                 }
             }
         }
@@ -614,6 +564,29 @@ struct CameraPreviewView: UIViewRepresentable {
         deinit {
             previewLayer?.removeFromSuperlayer()
         }
+    }
+}
+
+// MARK: - Zoom Indicator View
+
+struct ZoomIndicatorView: View {
+    let zoomLevel: CGFloat
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "minus.magnifyingglass")
+                .font(.system(size: 14))
+            
+            Text(String(format: "%.1fx", zoomLevel))
+                .font(.system(size: 16, weight: .medium, design: .monospaced))
+            
+            Image(systemName: "plus.magnifyingglass")
+                .font(.system(size: 14))
+        }
+        .foregroundColor(.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
     }
 }
 

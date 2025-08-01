@@ -61,11 +61,16 @@ class APIClient {
         do {
             var request = URLRequest(url: URL(string: "\(baseURL)/video-analysis/analyze/\(videoId)")!)
             request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.timeoutInterval = Config.apiRequestTimeout
             
-            let (_, response) = try await session.data(for: request)
+            let (data, response) = try await session.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse {
                 print("Analysis trigger status: \(httpResponse.statusCode)")
+                if let responseString = String(data: data, encoding: .utf8) {
+                    print("Analysis trigger response: \(responseString)")
+                }
             }
         } catch {
             print("Failed to trigger analysis: \(error)")

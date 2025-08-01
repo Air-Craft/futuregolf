@@ -47,11 +47,11 @@ enum TTSPhrases: String, CaseIterable {
 struct TTSCacheMetadata: Codable {
     let version: String
     let lastRefresh: Date
-    let phrases: [String: TTSCachedPhrase]
+    let phrases: [String: GenericCachedPhrase]
     
-    static let currentVersion = "1.0"
+    static let currentVersion = "2.0"
     
-    init(phrases: [String: TTSCachedPhrase] = [:]) {
+    init(phrases: [String: GenericCachedPhrase] = [:]) {
         self.version = TTSCacheMetadata.currentVersion
         self.lastRefresh = Date()
         self.phrases = phrases

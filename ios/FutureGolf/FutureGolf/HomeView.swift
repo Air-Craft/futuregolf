@@ -8,7 +8,7 @@ struct HomeView: View {
     @State private var showCoachingVideo = false
     @State private var showRecordingScreen = false
     @State private var showPreviousAnalyses = false
-    @State private var showDebugToast = false
+    @State private var showDebugPanel = false
     @State private var viewModel = VideoAnalysisViewModel()
     @State private var player: AVPlayer?
     
@@ -41,23 +41,23 @@ struct HomeView: View {
                 // Bottom spacer for safe area
                 Spacer(minLength: 80)
                 
-                // Debug button (only in DEBUG builds)
-                #if DEBUG
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        showDebugToast = true
-                    }) {
-                        Image(systemName: "ladybug.fill")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                            .padding(12)
-                            .background(Color.red.opacity(0.8))
-                            .clipShape(Circle())
+                // Debug button (shown when enabled in Config)
+                if Config.isDebugPanelEnabled {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            showDebugPanel = true
+                        }) {
+                            Image(systemName: "ladybug.fill")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .padding(12)
+                                .background(Color.red.opacity(0.8))
+                                .clipShape(Circle())
+                        }
+                        .padding()
                     }
-                    .padding()
                 }
-                #endif
             }
         }
         .ignoresSafeArea(.all)
@@ -138,17 +138,8 @@ struct HomeView: View {
                         }
                 }
             }
-            .sheet(isPresented: $showDebugToast) {
-                NavigationStack {
-                    DebugToastView()
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button("Done") {
-                                    showDebugToast = false
-                                }
-                            }
-                        }
-                }
+            .sheet(isPresented: $showDebugPanel) {
+                DebugPanelView()
             }
     }
     

@@ -9,8 +9,8 @@ AI-powered golf swing analyzer with real-time coaching feedback.
 #### Setup the container folder
 
 ```
-mkdir golfswinganalyzerai
-cd golfswinganalyzerai 
+mkdir golfai
+cd golfai
 mkdir dev; mkdir -p setup/backend
 # copy .env and gcs-credentials.json into setup/backend (and anything else as setup requires)
 
@@ -21,10 +21,11 @@ cd dev
 git clone git@github.com:Air-Craft/futuregolf.git your-dev-channel-name
 cd your-dev-channel-name 
 pyenv local 3.10   # optional. for devops not through pdm
-cp -pv ../../setup/backend\.* ../../setup/backend/* backend/
+cp -pv ../../setup/backend\.* ../../setup/backend/* backend/  # credentials
 make setup
 make apibase
-make backend [apibase] [800x] # port different for each dev instance
+make backend [PORT=8001] # optional port for running multiple versions of backend at same time
+# update your Config.swift api base!
 open ios/FutureGolf/FutureGolf.xcodeproj
 ```
 
@@ -33,7 +34,7 @@ open ios/FutureGolf/FutureGolf.xcodeproj
 ```
 tmux new -s backend
 # (in new terminal)
-make backend
+make backend PORT=8000
 # ctrl-b, d
 ...
 # to reattach later

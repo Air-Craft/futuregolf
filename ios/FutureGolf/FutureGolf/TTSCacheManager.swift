@@ -62,7 +62,8 @@ class TTSCacheManager: ObservableObject {
             }
             
             print("🗣️💾 TTS Cache: Network connected, proceeding with cache check")
-            print("🗣️💾 TTS Cache: Total phrases to cache: \(TTSPhrases.allCases.count)")
+            let phrasesToCache = TTSPhraseManager.shared.getAllPhrases()
+            print("🗣️💾 TTS Cache: Total phrases to cache: \(phrasesToCache.count)")
             
             // Check if force refresh is enabled
             if Config.ttsForceCacheRefreshOnLaunch {
@@ -110,7 +111,7 @@ class TTSCacheManager: ObservableObject {
     
     /// Get cached audio data for a given text
     func getCachedAudio(for text: String) async -> Data? {
-        guard let phrase = TTSPhrases.phraseFor(text: text) else {
+        guard let phrase = TTSPhraseManager.shared.phraseFor(text: text) else {
             return nil
         }
         
@@ -128,7 +129,7 @@ class TTSCacheManager: ObservableObject {
     
     /// Save audio data to cache
     func saveToCacheIfCacheable(text: String, data: Data) {
-        guard let phrase = TTSPhrases.phraseFor(text: text) else {
+        guard let phrase = TTSPhraseManager.shared.phraseFor(text: text) else {
             return // Not a cacheable phrase
         }
         
@@ -140,7 +141,7 @@ class TTSCacheManager: ObservableObject {
             // Update metadata
             let metadata = loadMetadata() ?? TTSCacheMetadata()
             var phrases = metadata.phrases
-            phrases[phrase.hash] = TTSCachedPhrase(phrase: phrase, size: Int64(data.count))
+            phrases[phrase.hash] = GenericCachedPhrase(phrase: phrase, size: Int64(data.count))
             
             let updatedMetadata = TTSCacheMetadata(phrases: phrases)
             try saveMetadata(updatedMetadata)
@@ -292,7 +293,8 @@ class TTSCacheManager: ObservableObject {
                 #endif
             }
             
-            print("🗣️💾 TTS Cache: Beginning background cache refresh for \(TTSPhrases.allCases.count) phrases")
+            let phrasesToCache = TTSPhraseManager.shared.getAllPhrases()
+            print("🗣️💾 TTS Cache: Beginning background cache refresh for \(phrasesToCache.count) phrases")
             print("🗣️💾 TTS Cache: Server URL: \(Config.serverBaseURL)")
             let startTime = Date()
             
@@ -300,10 +302,10 @@ class TTSCacheManager: ObservableObject {
             clearTempDirectory()
             print("🗣️💾 TTS Cache: Cleared temp directory")
             
-            print("🗣️💾 TTS Cache: Starting task group for \(TTSPhrases.allCases.count) phrases")
+            print("🗣️💾 TTS Cache: Starting task group for \(phrasesToCache.count) phrases")
             
-            await withTaskGroup(of: (TTSPhrases, Result<Data, Error>).self) { group in
-                let phrases = TTSPhrases.allCases
+            await withTaskGroup(of: (any TTSCacheablePhrase, Result<Data, Error>).self) { group in
+                let phrases = phrasesToCache
                 let totalCount = Double(phrases.count)
                 
                 print("🗣️💾 TTS Cache: Adding \(phrases.count) tasks to group")
@@ -332,7 +334,7 @@ class TTSCacheManager: ObservableObject {
                 
                 var successCount = 0
                 var failureCount = 0
-                var tempCachedPhrases: [String: TTSCachedPhrase] = [:]
+                var tempCachedPhrases: [String: GenericCachedPhrase] = [:]
                 
                 for await (phrase, result) in group {
                     print("🗣️💾 TTS Cache: Received result for phrase: '\(phrase.text.prefix(20))...'")
@@ -341,7 +343,7 @@ class TTSCacheManager: ObservableObject {
                     case .success(let data):
                         print("🗣️💾 TTS Cache: Saving temp file for phrase: \(phrase.id)")
                         saveToCacheTemp(phrase: phrase, data: data)
-                        tempCachedPhrases[phrase.hash] = TTSCachedPhrase(phrase: phrase, size: Int64(data.count))
+                        tempCachedPhrases[phrase.hash] = GenericCachedPhrase(phrase: phrase, size: Int64(data.count))
                         successCount += 1
                         print("🗣️💾 TTS Cache: Progress: \(successCount)/\(phrases.count) succeeded")
                     case .failure(let error):
@@ -375,7 +377,7 @@ class TTSCacheManager: ObservableObject {
                 print("🗣️💾 TTS Cache: Cache refresh completed in \(String(format: "%.2f", elapsed))s")
                 print("🗣️💾 TTS Cache: Success: \(successCount), Failed: \(failureCount)")
                 
-                if successCount == TTSPhrases.allCases.count {
+                if successCount == phrases.count {
                     atomicallyReplaceCache(with: tempCachedPhrases)
                     print("🗣️💾 TTS Cache: Cache successfully updated")
                 } else {
@@ -462,7 +464,7 @@ class TTSCacheManager: ObservableObject {
         }
     }
     
-    private func saveToCacheTemp(phrase: TTSPhrases, data: Data) {
+    private func saveToCacheTemp(phrase: any TTSCacheablePhrase, data: Data) {
         let tempAudioFile = tempDirectory.appendingPathComponent(phrase.filename)
         
         do {
@@ -472,7 +474,7 @@ class TTSCacheManager: ObservableObject {
         }
     }
     
-    private func atomicallyReplaceCache(with phrases: [String: TTSCachedPhrase]) {
+    private func atomicallyReplaceCache(with phrases: [String: GenericCachedPhrase]) {
         do {
             // Move temp audio files to final location
             let tempAudioFiles = try FileManager.default.contentsOfDirectory(at: tempDirectory, includingPropertiesForKeys: nil)

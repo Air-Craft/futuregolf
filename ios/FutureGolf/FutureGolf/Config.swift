@@ -53,7 +53,7 @@ struct Config {
     
     /// Timeout for general API requests (in seconds)
     static let apiRequestTimeout: TimeInterval = 30.0
-    
+
     /// Timeout for video upload requests (in seconds)
     static let videoUploadTimeout: TimeInterval = 120.0
     
@@ -61,6 +61,15 @@ struct Config {
     
     /// Enable debug logging
     static let isDebugEnabled: Bool = {
+        #if DEBUG
+        return true
+        #else
+        return false
+        #endif
+    }()
+    
+    /// Enable debug panel in the app
+    static let isDebugPanelEnabled: Bool = {
         #if DEBUG
         return true
         #else

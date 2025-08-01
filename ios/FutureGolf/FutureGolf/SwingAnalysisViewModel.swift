@@ -34,8 +34,12 @@ class SwingAnalysisViewModel: ObservableObject {
     
     func startNewAnalysis(videoURL: URL) {
         self.videoURL = videoURL
-        generateThumbnail(from: videoURL)
         startProcessingSimulation()
+        
+        // Generate thumbnail asynchronously
+        Task {
+            await generateThumbnailAsync(from: videoURL)
+        }
         
         Task {
             await uploadAndAnalyzeVideo(url: videoURL)
@@ -52,7 +56,9 @@ class SwingAnalysisViewModel: ObservableObject {
                 
                 // Load video thumbnail if available
                 if let url = self.videoURL {
-                    generateThumbnail(from: url)
+                    Task {
+                        await generateThumbnailAsync(from: url)
+                    }
                 }
             } else {
                 // Fallback to API
@@ -71,14 +77,10 @@ class SwingAnalysisViewModel: ObservableObject {
                 self.processingProgress += 0.01
                 self.processingStatus = "Uploading video"
                 self.processingDetail = "Uploading \(Int(self.processingProgress * 100 / 0.3))%"
-            } else if self.processingProgress < 0.9 {
+            } else if self.processingProgress < 0.98 {
                 self.processingProgress += 0.005
                 self.processingStatus = "Analyzing"
                 self.processingDetail = "Processing swing data..."
-            } else if self.processingProgress < 0.98 {
-                self.processingProgress += 0.002
-                self.processingStatus = "Downloading"
-                self.processingDetail = "Receiving analysis results..."
             }
         }
     }
@@ -98,6 +100,14 @@ class SwingAnalysisViewModel: ObservableObject {
             self.analysisResult = result
             updateDisplayData(from: result)
             generateKeyMoments(from: result)
+            
+            // Pre-cache TTS phrases for analysis
+            TTSPhraseManager.shared.registerAnalysisPhrases(from: result)
+            
+            // Start caching analysis phrases in background
+            Task {
+                await TTSService.shared.cacheManager.warmCache()
+            }
             
             // Save to local storage
             await storageManager.saveAnalysis(result, videoURL: url)
@@ -167,14 +177,32 @@ class SwingAnalysisViewModel: ObservableObject {
     func generateKeyMoments(from result: AnalysisResult) {
         guard let url = videoURL else { return }
         
+        // Generate key moments with placeholders, then load thumbnails asynchronously
         keyMoments = result.swingPhases.map { phase in
-            let thumbnail = generateThumbnail(from: url, at: phase.timestamp)
-            return KeyMoment(
+            KeyMoment(
                 phaseName: phase.name,
                 timestamp: phase.timestamp,
-                thumbnail: thumbnail,
+                thumbnail: nil, // Start with nil
                 feedback: phase.feedback
             )
+        }
+        
+        // Generate thumbnails asynchronously
+        Task {
+            for (index, phase) in result.swingPhases.enumerated() {
+                if let thumbnail = await generateThumbnailAsync(from: url, at: phase.timestamp) {
+                    await MainActor.run {
+                        if index < keyMoments.count {
+                            keyMoments[index] = KeyMoment(
+                                phaseName: phase.name,
+                                timestamp: phase.timestamp,
+                                thumbnail: thumbnail,
+                                feedback: phase.feedback
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
     
@@ -197,6 +225,36 @@ class SwingAnalysisViewModel: ObservableObject {
     
     private func generateThumbnail(from url: URL) {
         videoThumbnail = generateThumbnail(from: url, at: 0)
+    }
+    
+    private func generateThumbnailAsync(from url: URL, at time: Double = 0) async -> UIImage? {
+        return await withCheckedContinuation { continuation in
+            Task.detached(priority: .background) {
+                let asset = AVURLAsset(url: url)
+                let imageGenerator = AVAssetImageGenerator(asset: asset)
+                imageGenerator.appliesPreferredTrackTransform = true
+                imageGenerator.maximumSize = CGSize(width: 400, height: 300)
+                
+                let cmTime = CMTime(seconds: time, preferredTimescale: 1)
+                
+                do {
+                    let cgImage = try imageGenerator.copyCGImage(at: cmTime, actualTime: nil)
+                    let image = UIImage(cgImage: cgImage)
+                    continuation.resume(returning: image)
+                } catch {
+                    print("Error generating thumbnail: \(error)")
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+    
+    private func generateThumbnailAsync(from url: URL) async {
+        if let thumbnail = await generateThumbnailAsync(from: url, at: 0) {
+            await MainActor.run {
+                self.videoThumbnail = thumbnail
+            }
+        }
     }
     
     private func playCompletionSound() {
