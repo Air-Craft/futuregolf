@@ -65,14 +65,14 @@ class RecordingViewModel: NSObject {
     var currentFrameRate: Double = 0.0  // Actual achieved frame rate for display
     var recordedVideoURL: URL?
     var recordedAnalysisId: String?
-    private var isProcessingEnabled = false  // Controls whether to process captured photos
-    private var captureStartTime: Date?
-    private var lastFrameCaptureTime: TimeInterval = 0  // Track last frame capture time
-    private var lastFrameSendTime: TimeInterval = 0  // Track last frame send time
-    private var activeAnalysisTasks = Set<Task<Void, Never>>()  // Track active analysis tasks
-    private var capturedFramesBuffer: [UIImage] = []  // Buffer for captured frames
-    private var shouldCaptureNextFrame = false  // Flag to capture next video frame
-    private var recordingSessionId = UUID()  // Unique ID for each recording session
+    var isProcessingEnabled = false  // Controls whether to process captured photos
+    var captureStartTime: Date?
+    var lastFrameCaptureTime: TimeInterval = 0  // Track last frame capture time
+    var lastFrameSendTime: TimeInterval = 0  // Track last frame send time
+    var activeAnalysisTasks = Set<Task<Void, Never>>()  // Track active analysis tasks
+    var capturedFramesBuffer: [UIImage] = []  // Buffer for captured frames
+    var shouldCaptureNextFrame = false  // Flag to capture next video frame
+    var recordingSessionId = UUID()  // Unique ID for each recording session
     
     // MARK: - Camera Properties
     var deviceOrientation: UIDeviceOrientation = .portrait
@@ -89,12 +89,12 @@ class RecordingViewModel: NSObject {
     private let onDeviceSTT = OnDeviceSTTService.shared
     private let swingDetectionWS = SwingDetectionWebSocketService()
     private let cameraService = CameraService()
+    private let recordingService = RecordingService()
     
     // MARK: - Camera Session
     var captureSession: AVCaptureSession? {
         return cameraService.captureSession
     }
-    private var videoOutput: AVCaptureMovieFileOutput?
     
     // MARK: - Audio Feedback
     private var swingTonePlayer: AVAudioPlayer?
@@ -182,28 +182,15 @@ class RecordingViewModel: NSObject {
     
     func setupCamera() async throws {
         try await cameraService.setupCamera(for: cameraPosition)
+        if let session = cameraService.captureSession {
+            recordingService.setupVideoOutput(for: session)
+        }
     }
     
     // MARK: - Orientation Handling
     
     func updateOrientation(_ orientation: UIDeviceOrientation) {
         // This will be handled by the view and passed to the CameraService
-    }
-    
-    private func setupVideoOutput() {
-        guard let session = captureSession else { return }
-        
-        videoOutput = AVCaptureMovieFileOutput()
-        
-        if let output = videoOutput, session.canAddOutput(output) {
-            session.addOutput(output)
-            
-            if let connection = output.connection(with: .video) {
-                if connection.isVideoStabilizationSupported {
-                    connection.preferredVideoStabilizationMode = .auto
-                }
-            }
-        }
     }
     
     // MARK: - Camera Control Methods
@@ -247,7 +234,15 @@ class RecordingViewModel: NSObject {
             swingDetectionWS.beginDetection()
         }
         
-        startVideoRecording()
+        recordingService.startRecording { [weak self] url, error in
+            if let error = error {
+                print("Video recording finished with error: \(error)")
+            } else if let url = url {
+                print("Video recording finished successfully: \(url)")
+                self?.handleRecordingCompletion(url: url)
+            }
+        }
+        
         startStillCaptureTimer()
         startTimeoutTimer()
         
@@ -273,7 +268,7 @@ class RecordingViewModel: NSObject {
         activeAnalysisTasks.forEach { $0.cancel() }
         activeAnalysisTasks.removeAll()
         
-        stopVideoRecording()
+        recordingService.stopRecording()
         onDeviceSTT.stopListening()
         
         if !Config.disableSwingDetection {
@@ -286,20 +281,19 @@ class RecordingViewModel: NSObject {
         ttsService.speakText("That's great. I'll get to work analyzing your swings.")
     }
     
-    private func startVideoRecording() {
-        guard let output = videoOutput else { return }
-        let outputURL = createOutputFileURL()
-        output.startRecording(to: outputURL, recordingDelegate: self)
-    }
-    
-    private func stopVideoRecording() {
-        videoOutput?.stopRecording()
-    }
-    
-    private func createOutputFileURL() -> URL {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let fileName = "swing_recording_\(Date().timeIntervalSince1970).mp4"
-        return documentsPath.appendingPathComponent(fileName)
+    private func handleRecordingCompletion(url: URL) {
+        self.recordedVideoURL = url
+        
+        if let deps = self.dependencies {
+            self.recordedAnalysisId = deps.videoProcessing.queueVideo(videoURL: url)
+            deps.setCurrentRecording(url: url, id: self.recordedAnalysisId!)
+            
+            if self.currentPhase != .processing {
+                self.currentPhase = .processing
+            }
+        } else {
+            print("⚠️ No dependencies available, cannot queue video")
+        }
     }
     
     // MARK: - Timer Methods
@@ -410,8 +404,9 @@ class RecordingViewModel: NSObject {
             
             do {
                 let isSwingDetected = try await self.analyzeStillForSwing(image)
-                guard self.isProcessingEnabled else { return }
-                self.processSwingDetection(isSwingDetected: isSwingDetected, confidence: 0.0)
+                if self.isProcessingEnabled {
+                    self.processSwingDetection(isSwingDetected: isSwingDetected, confidence: 0.0)
+                }
             } catch {
                 print("🚨 Error analyzing still image: \(error)")
             }
@@ -420,9 +415,7 @@ class RecordingViewModel: NSObject {
         activeAnalysisTasks.insert(task)
         Task { [weak self] in
             await task.value
-            await MainActor.run {
-                self?.activeAnalysisTasks.remove(task)
-            }
+            self?.activeAnalysisTasks.remove(task)
         }
     }
     
@@ -481,56 +474,5 @@ class RecordingViewModel: NSObject {
         recordingAPIService.endSession()
         swingDetectionWS.endDetection()
         swingDetectionWS.disconnect()
-    }
-}
-
-// MARK: - AVCaptureFileOutputRecordingDelegate
-
-extension RecordingViewModel: AVCaptureFileOutputRecordingDelegate {
-    
-    nonisolated func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
-        print("Video recording started to: \(fileURL)")
-    }
-    
-    nonisolated func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
-        if let error = error {
-            print("Video recording finished with error: \(error)")
-        } else {
-            print("Video recording finished successfully: \(outputFileURL)")
-            Task { @MainActor in
-                self.recordedVideoURL = outputFileURL
-                
-                if let deps = self.dependencies {
-                    self.recordedAnalysisId = deps.videoProcessing.queueVideo(videoURL: outputFileURL)
-                    deps.setCurrentRecording(url: outputFileURL, id: self.recordedAnalysisId!)
-                    
-                    if self.currentPhase != .processing {
-                        self.currentPhase = .processing
-                    }
-                } else {
-                    print("⚠️ No dependencies available, cannot queue video")
-                }
-            }
-        }
-    }
-}
-
-// MARK: - UIImage Extension
-
-extension UIImage {
-    func resized(to targetSize: CGSize) -> UIImage? {
-        let size = self.size
-        let widthRatio = targetSize.width / size.width
-        let heightRatio = targetSize.height / size.height
-        let ratio = min(widthRatio, heightRatio)
-        
-        let newSize = CGSize(width: size.width * ratio, height: size.height * ratio)
-        
-        UIGraphicsBeginImageContextWithOptions(newSize, false, 0)
-        draw(in: CGRect(origin: .zero, size: newSize))
-        let newImage = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        
-        return newImage
     }
 }
