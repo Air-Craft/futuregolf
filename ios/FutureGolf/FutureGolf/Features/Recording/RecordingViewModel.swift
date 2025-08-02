@@ -46,7 +46,7 @@ struct ProgressCircle: Identifiable {
 
 @MainActor
 @Observable
-class RecordingViewModel: NSObject {
+class RecordingViewModel: ObservableObject {
     
     // MARK: - Dependencies
     weak var dependencies: AppDependencies?
@@ -112,7 +112,6 @@ class RecordingViewModel: NSObject {
     
     init(dependencies: AppDependencies? = nil) {
         self.dependencies = dependencies
-        super.init()
         
         print("🐛 RecordingViewModel: Initializing...")
         
