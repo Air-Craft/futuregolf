@@ -19,9 +19,6 @@ struct FutureGolfApp: App {
     init() {
         // Test server connectivity at launch
         testServerConnection()
-        
-        // Start TTS cache warming in background
-        warmTTSCache()
     }
     
     var body: some Scene {
@@ -59,8 +56,13 @@ struct FutureGolfApp: App {
                     .environmentObject(deps.videoProcessing)
                     .environmentObject(deps.connectivity)
                     .onAppear {
-                        // Process any pending video analyses after dependencies are set up
-                        processPendingAnalyses()
+                        // Perform debug operations if configured
+                        Task {
+                            await DebugService.shared.performDebugLaunchOperations(deps: deps)
+                        }
+                        
+                        // Perform app initialization tasks
+                        performAppInitialization()
                     }
             }
         }
@@ -68,12 +70,12 @@ struct FutureGolfApp: App {
     
     private func testServerConnection() {
         print("🚀 APP LAUNCH: Testing server connectivity...")
-        print("🚀 Server URL: \(Config.serverBaseURL)")
+        print("🚀 API URL: \(Config.apiBaseURL)")
         
         Task {
             do {
                 // Test basic connectivity
-                let url = URL(string: "\(Config.serverBaseURL)/health")!
+                let url = URL(string: "\(Config.apiBaseURL)/health")!
                 var healthRequest = URLRequest(url: url)
                 healthRequest.timeoutInterval = Config.healthCheckTimeout
                 let (data, response) = try await URLSession.shared.data(for: healthRequest)
@@ -86,7 +88,7 @@ struct FutureGolfApp: App {
                 }
                 
                 // Test TTS endpoint specifically
-                let ttsURL = URL(string: "\(Config.serverBaseURL)/api/v1/tts/coaching")!
+                let ttsURL = URL(string: "\(Config.apiBaseURL)/tts/coaching")!
                 var ttsRequest = URLRequest(url: ttsURL)
                 ttsRequest.httpMethod = "POST"
                 ttsRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -120,70 +122,70 @@ struct FutureGolfApp: App {
         }
     }
     
+    private func performAppInitialization() {
+        // Warm TTS cache
+        warmTTSCache()
+        
+        // Process pending analyses
+        processPendingAnalyses()
+    }
+    
     private func warmTTSCache() {
         print("🚀 APP LAUNCH: Starting TTS cache warming...")
         
-        Task { @MainActor [weak deps] in
-            guard let deps = deps else { return }
-            
-            // Check connectivity status
-            let isConnected = deps.connectivity.isConnected
-            print("🚀 APP LAUNCH: Network connected: \(isConnected)")
-            
-            // Show connectivity status on launch if not connected
-            if !isConnected {
-                ToastManager.shared.show("Waiting for connectivity...", 
-                                       type: .warning, 
-                                       duration: .infinity, 
-                                       id: "connectivity")
-            }
-            
-            let cacheManager = TTSService.shared.cacheManager
-            
-            // Check current cache status
-            let status = cacheManager.getCacheStatus()
-            print("🚀 TTS Cache Status:")
-            print("🚀   - Exists: \(status.exists)")
-            print("🚀   - Phrase count: \(status.phraseCount)")
-            if let lastRefresh = status.lastRefresh {
-                let age = Date().timeIntervalSince(lastRefresh)
-                print("🚀   - Last refresh: \(String(format: "%.1f", age/3600)) hours ago")
-            }
-            print("🚀   - Force refresh: \(Config.ttsForceCacheRefreshOnLaunch)")
-            print("🚀   - Should refresh: \(cacheManager.shouldRefreshCache())")
-            
-            // Only warm cache if connected
-            if isConnected {
-                cacheManager.warmCache()
-            } else {
-                print("🚀 APP LAUNCH: No connectivity, skipping cache warming")
-            }
+        // Check connectivity status
+        let isConnected = deps.connectivity.isConnected
+        print("🚀 APP LAUNCH: Network connected: \(isConnected)")
+        
+        // Show connectivity status on launch if not connected
+        if !isConnected {
+            ToastManager.shared.show("Waiting for connectivity...", 
+                                   type: .warning, 
+                                   duration: .infinity, 
+                                   id: "connectivity")
+        }
+        
+        let cacheManager = TTSService.shared.cacheManager
+        
+        // Check current cache status
+        let status = cacheManager.getCacheStatus()
+        print("🚀 TTS Cache Status:")
+        print("🚀   - Exists: \(status.exists)")
+        print("🚀   - Phrase count: \(status.phraseCount)")
+        if let lastRefresh = status.lastRefresh {
+            let age = Date().timeIntervalSince(lastRefresh)
+            print("🚀   - Last refresh: \(String(format: "%.1f", age/3600)) hours ago")
+        }
+        print("🚀   - Force refresh: \(Config.ttsForceCacheRefreshOnLaunch)")
+        print("🚀   - Should refresh: \(cacheManager.shouldRefreshCache())")
+        
+        // Only warm cache if connected
+        if isConnected {
+            cacheManager.warmCache()
+        } else {
+            print("🚀 APP LAUNCH: No connectivity, skipping cache warming")
         }
     }
     
     private func processPendingAnalyses() {
         print("🚀 APP LAUNCH: Checking for pending video analyses...")
         
-        Task { @MainActor [weak deps] in
-            guard let deps = deps else { return }
+        let processingService = deps.videoProcessing
+        let storageManager = deps.analysisStorage
+        
+        // Get pending analyses
+        let pendingAnalyses = storageManager.getPendingAnalyses()
+        print("🚀 Found \(pendingAnalyses.count) pending analyses")
+        
+        if !pendingAnalyses.isEmpty {
+            // Check connectivity
+            let isConnected = deps.connectivity.isConnected
             
-            let processingService = deps.videoProcessing
-            let storageManager = deps.analysisStorage
-            
-            // Get pending analyses
-            let pendingAnalyses = storageManager.getPendingAnalyses()
-            print("🚀 Found \(pendingAnalyses.count) pending analyses")
-            
-            if !pendingAnalyses.isEmpty {
-                // Check connectivity
-                let isConnected = deps.connectivity.isConnected
-                
-                if isConnected {
-                    print("🚀 Network available, starting processing...")
-                    processingService.processPendingAnalyses()
-                } else {
-                    print("🚀 No network connection, will process when connection restored")
-                }
+            if isConnected {
+                print("🚀 Network available, starting processing...")
+                processingService.processPendingAnalyses()
+            } else {
+                print("🚀 No network connection, will process when connection restored")
             }
         }
     }

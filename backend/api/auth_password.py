@@ -16,10 +16,11 @@ from services.email_service import email_service
 from middleware.auth_middleware import get_current_user
 from datetime import datetime
 import logging
+from config.api import API_VERSION_PREFIX
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/auth", tags=["password"])
+router = APIRouter(prefix=f"{API_VERSION_PREFIX}/auth", tags=["password"])
 
 
 @router.post("/request-password-reset", response_model=BaseResponse)

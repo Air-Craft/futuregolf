@@ -12,6 +12,7 @@ import os
 import io
 import logging
 from dotenv import load_dotenv
+from config.api import API_VERSION_PREFIX
 
 # Load environment variables
 load_dotenv()
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize router
 router = APIRouter(
-    prefix="/api/v1/tts",
+    prefix=f"{API_VERSION_PREFIX}/tts",
     tags=["TTS"],
     responses={404: {"description": "Not found"}},
 )

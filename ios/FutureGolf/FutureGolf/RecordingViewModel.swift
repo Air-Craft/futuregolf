@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import AVFoundation
+import AudioToolbox
 import Combine
 import Speech
 import CoreImage
@@ -50,12 +51,12 @@ enum CameraConfiguration {
     static let minFrameRate: Double = 24.0        // Minimum acceptable frame rate
     static let resolution = AVCaptureSession.Preset.hd1920x1080
     static let videoFormat = AVFileType.mp4
-    static let stillCaptureInterval: TimeInterval = 0.25
+    static let stillCaptureInterval: TimeInterval = Config.stillCaptureInterval
 }
 
 @MainActor
 @Observable
-class RecordingViewModel: NSObject, ObservableObject {
+class RecordingViewModel: NSObject {
     
     // MARK: - Dependencies
     weak var dependencies: AppDependencies?
@@ -75,13 +76,14 @@ class RecordingViewModel: NSObject, ObservableObject {
     var recordedVideoURL: URL?
     var recordedAnalysisId: String?
     private var isProcessingEnabled = false  // Controls whether to process captured photos
+    private var captureStartTime: Date?
     private var lastFrameCaptureTime: TimeInterval = 0  // Track last frame capture time
     private var lastFrameSendTime: TimeInterval = 0  // Track last frame send time
-    private var shouldCaptureNextFrame = false  // Flag to capture next frame
     private var activeAnalysisTasks = Set<Task<Void, Never>>()  // Track active analysis tasks
     private var capturedFramesBuffer: [UIImage] = []  // Buffer for captured frames
+    private var shouldCaptureNextFrame = false  // Flag to capture next video frame
     
-    // MARK: - Camera Properties  
+    // MARK: - Camera Properties
     var preferredFrameRate: Double { CameraConfiguration.preferredFrameRate }
     var fallbackFrameRate: Double { CameraConfiguration.fallbackFrameRate }
     var minFrameRate: Double { CameraConfiguration.minFrameRate }
@@ -90,8 +92,7 @@ class RecordingViewModel: NSObject, ObservableObject {
     var deviceOrientation: UIDeviceOrientation = .portrait
     var isAutoFocusEnabled = true
     var focusMode: AVCaptureDevice.FocusMode = .continuousAutoFocus
-    var stillCaptureInterval: TimeInterval = 0.35 // Capture every 0.35s as requested
-    var frameUploadInterval: TimeInterval = 1.4 // Send frames every 1.4s
+    var stillCaptureInterval: TimeInterval = Config.stillCaptureInterval // Capture every 0.35s as requested
     var recordingTimeout: TimeInterval { Config.recordingTimeout }
     
     // MARK: - Configuration
@@ -102,6 +103,7 @@ class RecordingViewModel: NSObject, ObservableObject {
     private let apiClient = APIClient()
     private let recordingAPIService = RecordingAPIService.shared
     private let onDeviceSTT = OnDeviceSTTService.shared
+    private let swingDetectionWS = SwingDetectionWebSocketService()
     
     // MARK: - Camera Session
     var captureSession: AVCaptureSession?
@@ -111,8 +113,11 @@ class RecordingViewModel: NSObject, ObservableObject {
     private var videoInput: AVCaptureDeviceInput?
     private let videoDataOutputQueue = DispatchQueue(label: "com.futuregolf.videodataoutput")
     
+    // MARK: - Audio Feedback
+    private var swingTonePlayer: AVAudioPlayer?
+    private var completionTonePlayer: AVAudioPlayer?
+    
     // MARK: - Timers
-    private var recordingTimer: Timer?
     private var stillCaptureTimer: Timer?
     private var timeoutTimer: Timer?
     
@@ -142,9 +147,26 @@ class RecordingViewModel: NSObject, ObservableObject {
         // Start API session
         let sessionId = recordingAPIService.startSession()
         print("🐛 RecordingViewModel: API session started with ID: \(sessionId)")
+        
+        // Setup WebSocket callbacks
+        setupWebSocketCallbacks()
+        
+        // Setup audio tones
+        setupAudioTones()
     }
     
     // MARK: - Setup Methods
+    
+    private func setupAudioTones() {
+        // Prepare system sounds for quick playback
+        // Using system sounds for better performance and lower latency
+        
+        // For now, we'll use system sounds, but you can add custom sound files later
+        // To add custom sounds:
+        // 1. Add .wav or .aiff files to the project
+        // 2. Load them with: Bundle.main.url(forResource: "swing", withExtension: "wav")
+        // 3. Create AVAudioPlayer instances with those URLs
+    }
     
     private func setupProgressCircles() {
         progressCircles = (0..<targetSwingCount).map { _ in ProgressCircle() }
@@ -169,6 +191,23 @@ class RecordingViewModel: NSObject, ObservableObject {
             guard currentPhase == .recording else { return }
             print("🎤 Voice command received: Stop Recording")
             finishRecording()
+        }
+    }
+    
+    private func setupWebSocketCallbacks() {
+        // Setup WebSocket callbacks
+        swingDetectionWS.onSwingDetected = { [weak self] confidence in
+            Task { @MainActor in
+                self?.processSwingDetection(isSwingDetected: true, confidence: confidence)
+            }
+        }
+        
+        // Note: Server no longer sends test_complete - client decides when to stop
+        // This callback is kept for compatibility but won't be called
+        
+        swingDetectionWS.onError = { [weak self] error in
+            print("❌ WebSocket error: \(error)")
+            // Fallback to REST API if WebSocket fails
         }
     }
     
@@ -389,7 +428,7 @@ class RecordingViewModel: NSObject, ObservableObject {
                 let isHighRes = dimensions.width >= 1920 && dimensions.height >= 1080
                 
                 for range in frameRateRanges {
-                    if range.maxFrameRate > maxAvailableFrameRate || 
+                    if range.maxFrameRate > maxAvailableFrameRate ||
                        (range.maxFrameRate == maxAvailableFrameRate && isHighRes && (bestFormat == nil || !isFormatHighRes(bestFormat!))) {
                         bestFormat = format
                         maxAvailableFrameRate = range.maxFrameRate
@@ -581,12 +620,9 @@ class RecordingViewModel: NSObject, ObservableObject {
         isRecording = true
         isProcessingEnabled = true  // Enable photo processing
         showPositioningIndicator = false
-        showProgressCircles = true
+        showProgressCircles = !Config.disableSwingDetection  // Only show progress circles if swing detection is enabled
         recordingTime = 0
         swingCount = 0
-        stillSequenceNumber = 0  // Reset sequence number
-        lastFrameCaptureTime = 0  // Reset last capture time
-        lastFrameSendTime = 0  // Reset last send time
         capturedFramesBuffer.removeAll()  // Clear buffer
         
         // Reset progress circles
@@ -594,11 +630,16 @@ class RecordingViewModel: NSObject, ObservableObject {
             progressCircles[i].isCompleted = false
         }
         
+        // Connect WebSocket for swing detection (if enabled)
+        if !Config.disableSwingDetection {
+            swingDetectionWS.connect()
+            swingDetectionWS.beginDetection()
+        }
+        
         // Start recording video
         startVideoRecording()
         
         // Start timers
-        startRecordingTimer()
         startStillCaptureTimer()
         startTimeoutTimer()
         
@@ -645,6 +686,11 @@ class RecordingViewModel: NSObject, ObservableObject {
         onDeviceSTT.stopListening()
         stopVoiceRecognition()
         
+        // End swing detection
+        if !Config.disableSwingDetection {
+            swingDetectionWS.endDetection()
+        }
+        
         // Set phase to processing only after video URL is available
         // This will be done in the delegate callback
         
@@ -674,15 +720,6 @@ class RecordingViewModel: NSObject, ObservableObject {
     
     // MARK: - Timer Methods
     
-    private func startRecordingTimer() {
-        recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.recordingTime += 0.1
-                self?.onTimeUpdate?(self?.recordingTime ?? 0)
-            }
-        }
-    }
-    
     private func startStillCaptureTimer() {
         stillCaptureTimer = Timer.scheduledTimer(withTimeInterval: stillCaptureInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -706,9 +743,6 @@ class RecordingViewModel: NSObject, ObservableObject {
     }
     
     private func stopAllTimers() {
-        recordingTimer?.invalidate()
-        recordingTimer = nil
-        
         stillCaptureTimer?.invalidate()
         stillCaptureTimer = nil
         
@@ -742,33 +776,45 @@ class RecordingViewModel: NSObject, ObservableObject {
     // MARK: - Still Capture Methods
     
     func captureStillForAnalysis() {
-        // TEMPORARILY DISABLED - No frame capture or API calls
-        print("🚫 Frame capture and API sending temporarily disabled")
-        return
-        
-        /*
         guard currentPhase == .recording,
-              isProcessingEnabled else { 
+              isProcessingEnabled else {
             print("🛑 Skipping frame capture request - not in recording phase or processing disabled")
-            return 
+            return
         }
         
         // Set flag to capture next video frame
         shouldCaptureNextFrame = true
-        */
+    }
+    
+    // MARK: - Audio Feedback Methods
+    
+    private func playSwingTone() {
+        // Play a short tone to indicate swing detected
+        // Using system sound for low latency
+        AudioServicesPlaySystemSound(1057) // System sound ID for "Tink"
+    }
+    
+    private func playCompletionTone() {
+        // Play a different tone to indicate all swings complete
+        // Using system sound for low latency
+        AudioServicesPlaySystemSound(1025) // System sound ID for "Complete"
     }
     
     // MARK: - Swing Detection Methods
     
-    func processSwingDetection(isSwingDetected: Bool) {
+    func processSwingDetection(isSwingDetected: Bool, confidence: Float = 0.0) {
         guard currentPhase == .recording, isSwingDetected else { return }
         
         swingCount += 1
+        print("🏌️ Swing \(swingCount) detected with confidence: \(confidence)!")
         
         // Update progress circle
         if swingCount <= progressCircles.count {
             progressCircles[swingCount - 1].isCompleted = true
         }
+        
+        // Play swing detection tone
+        playSwingTone()
         
         // Provide audio feedback
         if swingCount == 1 {
@@ -780,37 +826,22 @@ class RecordingViewModel: NSObject, ObservableObject {
         } else if swingCount == 2 {
             ttsService.speakText("Ok one more to go.")
         } else if swingCount >= targetSwingCount {
+            // Play completion tone before finishing
+            playCompletionTone()
             finishRecording()
         }
     }
     
     func processStillImage(_ image: UIImage) {
         // Only process if enabled
-        guard isProcessingEnabled else { 
+        guard isProcessingEnabled else {
             print("🛑 Skipping still image processing - processing disabled")
-            return 
-        }
-        
-        // Add to buffer
-        capturedFramesBuffer.append(image)
-        
-        // Check if it's time to send (every 1.4s)
-        let currentTime = recordingTime
-        let timeSinceLastSend = currentTime - lastFrameSendTime
-        
-        guard timeSinceLastSend >= frameUploadInterval else {
-            print("📸 Frame captured but not sending yet (time since last send: \(timeSinceLastSend)s)")
             return
         }
         
-        // Get the most recent frame from buffer
-        guard let frameToSend = capturedFramesBuffer.last else { return }
+        let frameToSend = image
         
-        // Clear buffer and update send time
-        capturedFramesBuffer.removeAll()
-        lastFrameSendTime = currentTime
-        
-        print("📤 Sending frame for analysis (buffer had \(capturedFramesBuffer.count + 1) frames)")
+        print("🖼️ Sending frame for analysis...")
         
         // Send to server for swing detection
         let task = Task { [weak self] in
@@ -831,16 +862,10 @@ class RecordingViewModel: NSObject, ObservableObject {
                         print("🛑 Ignoring swing detection result - processing disabled")
                         return
                     }
-                    self.processSwingDetection(isSwingDetected: isSwingDetected)
+                    self.processSwingDetection(isSwingDetected: isSwingDetected, confidence: 0.0)
                 }
             } catch {
-                print("Error analyzing still image: \(error)")
-                // Only do fallback if still processing
-                await MainActor.run {
-                    guard self.isProcessingEnabled else { return }
-                    let mockDetection = Bool.random() && self.recordingTime > 2.0 // Mock detection after 2 seconds
-                    self.processSwingDetection(isSwingDetected: mockDetection)
-                }
+                print("🚨 Error analyzing still image: \(error)")
             }
         }
         
@@ -859,11 +884,6 @@ class RecordingViewModel: NSObject, ObservableObject {
     private var stillSequenceNumber = 0
     
     private func analyzeStillForSwing(_ image: UIImage) async throws -> Bool {
-        // TEMPORARILY DISABLED - Always return false to disable swing detection
-        print("🚫 Swing detection temporarily disabled - returning false")
-        return false
-        
-        /*
         // Check if task is cancelled
         try Task.checkCancellation()
         
@@ -875,28 +895,24 @@ class RecordingViewModel: NSObject, ObservableObject {
             throw CancellationError()
         }
         
-        // Use API service for swing detection
-        let response = try await recordingAPIService.analyzeSwingFromImage(
-            image, 
-            sequenceNumber: stillSequenceNumber
-        )
+        // Check if swing detection is disabled
+        if Config.disableSwingDetection {
+            // Skip swing detection entirely
+            return false
+        }
         
-        // Check again after network call
-        try Task.checkCancellation()
-        
-        print("Swing detection: \(response.swingDetected), confidence: \(response.confidence), phase: \(response.swingPhase ?? "none")")
-        
-        // Return true if swing detected with high confidence
-        return response.swingDetected && response.confidence > 0.7
-        */
+        // Send frame via WebSocket if connected
+        if swingDetectionWS.isConnected {
+            try await swingDetectionWS.sendFrame(image)
+            // WebSocket will handle the response via callbacks
+            return false // Don't process here, let WebSocket callbacks handle it
+        } else {
+            print("⚠️ WebSocket not connected for swing detection")
+            // Could attempt to reconnect here if needed
+            return false
+        }
     }
     
-    private func compressImage(_ image: UIImage) -> Data? {
-        // Resize to much smaller size for faster processing as requested
-        let targetSize = CGSize(width: 150, height: 200)
-        let resizedImage = image.resized(to: targetSize)
-        return resizedImage?.jpegData(compressionQuality: 0.6)
-    }
     
     // MARK: - Error Handling
     
@@ -906,7 +922,7 @@ class RecordingViewModel: NSObject, ObservableObject {
     }
     
     func handleInsufficientStorage() {
-        errorType = .insufficientStorage  
+        errorType = .insufficientStorage
         currentPhase = .error
     }
     
@@ -936,6 +952,8 @@ class RecordingViewModel: NSObject, ObservableObject {
         voiceCommandCancellable?.cancel()
         captureSession?.stopRunning()
         recordingAPIService.endSession()
+        swingDetectionWS.endDetection()
+        swingDetectionWS.disconnect()
     }
     
     deinit {
@@ -984,8 +1002,8 @@ extension RecordingViewModel: AVCaptureFileOutputRecordingDelegate {
 
 extension RecordingViewModel: AVCaptureVideoDataOutputSampleBufferDelegate {
     
-    nonisolated func captureOutput(_ output: AVCaptureOutput, 
-                                   didOutput sampleBuffer: CMSampleBuffer, 
+    nonisolated func captureOutput(_ output: AVCaptureOutput,
+                                   didOutput sampleBuffer: CMSampleBuffer,
                                    from connection: AVCaptureConnection) {
         // Check if we should capture this frame
         Task { @MainActor in
@@ -1002,15 +1020,10 @@ extension RecordingViewModel: AVCaptureVideoDataOutputSampleBufferDelegate {
                 self.shouldCaptureNextFrame = false
                 return
             }
-            
-            // Check if enough time has passed since last capture
-            let currentTime = self.recordingTime
-            let timeSinceLastCapture = currentTime - self.lastFrameCaptureTime
-            
-            guard timeSinceLastCapture >= self.stillCaptureInterval else { return }
-            
+                        
             // Reset flag and update last capture time
             self.shouldCaptureNextFrame = false
+            let currentTime = Date().timeIntervalSince1970
             self.lastFrameCaptureTime = currentTime
             
             print("🎥 Capturing frame for swing analysis at time: \(currentTime)")

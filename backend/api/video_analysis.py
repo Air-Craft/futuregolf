@@ -13,11 +13,12 @@ from models.user import User
 from models.video import Video
 from models.video_analysis import VideoAnalysis
 from middleware.auth_middleware import get_current_user
+from config.api import API_VERSION_PREFIX
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/v1/video-analysis",
+    prefix=f"{API_VERSION_PREFIX}/video-analysis",
     tags=["video-analysis"]
 )
 

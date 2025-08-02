@@ -6,38 +6,7 @@ import Combine
 
 // Voice analysis has been moved to on-device processing
 
-struct SwingDetectionRequest: Codable {
-    let sessionId: String
-    let imageData: String
-    let sequenceNumber: Int
-    let timestamp: String?
-    
-    enum CodingKeys: String, CodingKey {
-        case timestamp
-        case sessionId = "session_id"
-        case imageData = "image_data"
-        case sequenceNumber = "sequence_number"
-    }
-}
-
-struct SwingDetectionResponse: Codable {
-    let swingDetected: Bool
-    let confidence: Float
-    let swingPhase: String?
-    let reason: String
-    let sessionId: String
-    let sequenceNumber: Int
-    let timestamp: String
-    
-    enum CodingKeys: String, CodingKey {
-        case reason, timestamp
-        case swingDetected = "swing_detected"
-        case confidence
-        case swingPhase = "swing_phase"
-        case sessionId = "session_id"
-        case sequenceNumber = "sequence_number"
-    }
-}
+// Swing detection has been moved to WebSocket implementation (SwingDetectionWebSocketService)
 
 // MARK: - Recording API Service
 
@@ -56,7 +25,7 @@ class RecordingAPIService: ObservableObject {
     
     private init() {
         // Get base URL from centralized config
-        self.baseURL = Config.serverBaseURL
+        self.baseURL = Config.apiBaseURL
         
         // Configure URL session
         let config = URLSessionConfiguration.default
@@ -91,48 +60,8 @@ class RecordingAPIService: ObservableObject {
     // MARK: - WebSocket Voice Streaming Removed
     // Voice streaming has been replaced with on-device speech recognition
     
-    // MARK: - Swing Detection API
-    
-    func analyzeSwingFromImage(_ image: UIImage, sequenceNumber: Int) async throws -> SwingDetectionResponse {
-        let url = URL(string: "\(baseURL)/api/v1/recording/swing/detect")!
-        
-        // Convert image to base64
-        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-            throw RecordingAPIError.imageProcessingFailed
-        }
-        
-        let base64String = imageData.base64EncodedString()
-        
-        let request = SwingDetectionRequest(
-            sessionId: getCurrentSessionId(),
-            imageData: base64String,
-            sequenceNumber: sequenceNumber,
-            timestamp: ISO8601DateFormatter().string(from: Date())
-        )
-        
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.httpBody = try JSONEncoder().encode(request)
-        urlRequest.timeoutInterval = Config.apiRequestTimeout
-        
-        let (data, response) = try await session.data(for: urlRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw RecordingAPIError.invalidResponse
-        }
-        
-        guard httpResponse.statusCode == 200 else {
-            throw RecordingAPIError.serverError(httpResponse.statusCode)
-        }
-        
-        let decoder = JSONDecoder()
-        let swingResponse = try decoder.decode(SwingDetectionResponse.self, from: data)
-        
-        print("Swing analysis result: detected=\(swingResponse.swingDetected), confidence=\(swingResponse.confidence), phase=\(swingResponse.swingPhase ?? "none")")
-        
-        return swingResponse
-    }
+    // MARK: - Swing Detection Removed
+    // Swing detection has been replaced with WebSocket implementation (SwingDetectionWebSocketService)
     
     // MARK: - Session Status API
     

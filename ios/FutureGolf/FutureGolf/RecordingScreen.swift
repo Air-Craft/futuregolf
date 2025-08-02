@@ -3,7 +3,7 @@ import AVFoundation
 
 struct RecordingScreen: View {
     @EnvironmentObject var deps: AppDependencies
-    @StateObject private var viewModel: RecordingViewModel
+    @State private var viewModel = RecordingViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var showCancelConfirmation = false
     @State private var cameraPreview: AVCaptureVideoPreviewLayer?
@@ -11,10 +11,6 @@ struct RecordingScreen: View {
     @State private var deviceOrientation = UIDevice.current.orientation
     @State private var currentZoom: CGFloat = 1.0
     @State private var showZoomIndicator = false
-    
-    init() {
-        _viewModel = StateObject(wrappedValue: RecordingViewModel())
-    }
     
     var body: some View {
         ZStack {
@@ -499,7 +495,7 @@ struct ProgressCirclesView: View {
 // MARK: - Camera Preview View
 
 struct CameraPreviewView: UIViewRepresentable {
-    @ObservedObject var viewModel: RecordingViewModel
+    var viewModel: RecordingViewModel
     
     func makeUIView(context: Context) -> UIView {
         print("🐛 CameraPreviewView: Creating preview view")

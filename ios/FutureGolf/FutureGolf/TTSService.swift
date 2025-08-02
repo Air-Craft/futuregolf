@@ -5,7 +5,7 @@ import Combine
 class TTSService: NSObject, ObservableObject {
     static let shared = TTSService()
     
-    private let serverURL = Config.serverBaseURL
+    private let serverURL = Config.apiBaseURL
     private var audioPlayer: AVAudioPlayer?
     private var audioPlayerDelegate: AudioPlayerDelegate?
     private var speechQueue: [(String, (Bool) -> Void)] = []

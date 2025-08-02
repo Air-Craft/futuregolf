@@ -15,10 +15,11 @@ from services.auth_utils import auth_utils
 from datetime import datetime, timedelta
 from typing import List, Optional
 import logging
+from config.api import API_VERSION_PREFIX
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/sessions", tags=["sessions"])
+router = APIRouter(prefix=f"{API_VERSION_PREFIX}/sessions", tags=["sessions"])
 
 # In-memory session storage (in production, use Redis or database)
 # This is a simplified implementation for demonstration

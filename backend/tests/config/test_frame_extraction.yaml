@@ -1,0 +1,34 @@
+# Frame extraction configuration for tests
+# Matches iOS app parameters for consistent behavior
+
+frame_extraction:
+  # Frame rate for extraction (frames per second)
+  fps: 5  # 0.2 second intervals between frames
+  
+  # Image processing parameters (matching iOS app)
+  image_processing:
+    max_size: [128, 128]  # Target box size (maintains aspect ratio)
+    format: "webp"  # Output format
+    quality: 40  # WebP compression quality (1-100)
+    convert_bw: true  # Convert to grayscale
+  
+  # Output directory (relative to test file)
+  output_dir: "tests/fixtures/extracted_frames"
+  
+  # Test videos configuration
+  test_videos:
+    - name: "test_video"
+      path: "tests/fixtures/video/test_video.mov"
+      expected_swings: 3  # Number of swings expected in this video
+    
+    - name: "test_video1"
+      path: "tests/fixtures/video/test_video1.mp4"
+      expected_swings: 1
+    
+    - name: "test_video2"
+      path: "tests/fixtures/video/test_video2.mp4"
+      expected_swings: 1
+    
+    - name: "swing_count_test_video_quinn_no_club"
+      path: "tests/fixtures/video/swing_count_test_video_quinn_no_club.mov"
+      expected_swings: 3  # Assuming 3 swings based on file name

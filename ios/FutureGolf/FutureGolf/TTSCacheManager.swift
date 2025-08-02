@@ -295,7 +295,7 @@ class TTSCacheManager: ObservableObject {
             
             let phrasesToCache = TTSPhraseManager.shared.getAllPhrases()
             print("🗣️💾 TTS Cache: Beginning background cache refresh for \(phrasesToCache.count) phrases")
-            print("🗣️💾 TTS Cache: Server URL: \(Config.serverBaseURL)")
+            print("🗣️💾 TTS Cache: API URL: \(Config.apiBaseURL)")
             let startTime = Date()
             
             // Clear temp directory
@@ -412,7 +412,7 @@ class TTSCacheManager: ObservableObject {
     }
     
     private func synthesizePhrase(_ text: String) async throws -> Data {
-        let urlString = "\(Config.serverBaseURL)/api/v1/tts/coaching"
+        let urlString = "\(Config.apiBaseURL)/tts/coaching"
         print("🗣️💾 TTS Cache: Synthesizing from URL: \(urlString)")
         
         guard let url = URL(string: urlString) else {

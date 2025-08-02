@@ -15,10 +15,11 @@ from services.auth_utils import auth_utils
 from middleware.auth_middleware import get_current_user, get_current_user_optional
 from datetime import datetime, timedelta
 import logging
+from config.api import API_VERSION_PREFIX
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
+router = APIRouter(prefix=f"{API_VERSION_PREFIX}/auth", tags=["authentication"])
 
 
 @router.post("/login", response_model=LoginResponse)

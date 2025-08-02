@@ -15,9 +15,50 @@
 - `ViewModel`: All business logic, state, and side-effects live here.
 - `Model`: Codable structs/enums mirroring API or internal app structure.
 
+#### Services and Organisation
+- If a file, particularly a View or a ViewModel exceed 350-500 lines, consider breaking it up into smaller components
+- Long Views should be broken into sub-views. Stylised components that re-occur should be made into shared view components
+- With long VMs, consider creating Service classes, or moving extensions, enums and related features into their own files
+- Prefer composition over inheritance or extension. 
+- Views should only ever access methods and parameters of a ViewModel
+- ViewModels as much as is reasonably should work only with app-specific DSL, abstracting away direct iOS and library dependencies in services and utilities. 
+
+
+
 #### Global State & DI
 - Use a lightweight **Dependency Injection** system (e.g. environment objects, `@MainActor class AppContainer`) to inject services and global state.
 - Shared state should be managed via a **single source of truth** pattern (e.g. `@Observable`, `@Published`, or modern `ObservableStateObject` pattern).
+- Use @ObservedObject, @StateObject, @EnvironmentObject patterns appropriately where possible.
+- Use `@EnvironmentObject` for global state
+
+##### DI Pattern 
+
+````swift
+class AppDependencies: ObservableObject {
+    let authService = AuthService()
+    let settings = SettingsService()
+}
+
+@main
+struct MyApp: App {
+    @StateObject var deps = AppDependencies()
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .environmentObject(deps.authService)
+                .environmentObject(deps.settings)
+        }
+    }
+}
+````
+
+And now all views downstream can do:
+
+````swift
+@EnvironmentObject var authService: AuthService
+@EnvironmentObject var settings: SettingsService
+````
 
 #### Navigation
 - Use `NavigationStack` and route via a `Router` abstraction controlled by the ViewModel.

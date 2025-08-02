@@ -91,7 +91,7 @@ struct HomeView: View {
             .sheet(isPresented: $showDemoVideo) {
                 NavigationStack {
                     let demoResult = createDemoAnalysisResult()
-                    let videoPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.appendingPathComponent("golf1.mp4")
+                    let videoPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.appendingPathComponent("home_bg_video.mp4")
                     
                     VideoPlayerWithCoaching(
                         analysisResult: demoResult,
@@ -271,7 +271,7 @@ struct HomeView: View {
     }
     
     private func setupBackgroundVideo() {
-        guard let path = Bundle.main.path(forResource: "golf1", ofType: "mp4") else {
+        guard let path = Bundle.main.path(forResource: "home_bg_video", ofType: "mp4") else {
             print("Video file not found in bundle")
             return
         }

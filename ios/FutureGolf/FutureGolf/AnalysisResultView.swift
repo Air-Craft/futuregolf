@@ -70,7 +70,7 @@ struct AnalysisResultView: View {
         .foregroundColor(.white)
         .sheet(isPresented: $showVideoPlayer) {
             NavigationStack {
-                if let videoURL = Bundle.main.url(forResource: "golf1", withExtension: "mp4") {
+                if let videoURL = Bundle.main.url(forResource: "home_bg_video", withExtension: "mp4") {
                     VideoPlayerWithCoaching(
                         analysisResult: result,
                         videoURL: videoURL

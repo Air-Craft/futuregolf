@@ -1,5 +1,8 @@
 test_results/
 
+tests/fixtures/swing-detection/**
+tests/fixtures/extracted_frames/**
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -5,9 +5,17 @@ struct Config {
     
     /// The base URL for the backend API server
     static let serverBaseURL: String = {
-        // Check for environment variable first, then fallback to default
-//        return ProcessInfo.processInfo.environment["API_BASE_URL"] ?? "http://brians-macbook-pro-2.local:8000"
+        // Check for environment variable first
+        if let envURL = ProcessInfo.processInfo.environment["API_BASE_URL"] {
+            return envURL
+        }
+        
+        // Use localhost for simulator (it maps to host machine)
+        #if targetEnvironment(simulator)
+        return "http://localhost:8000"
+        #else
         return "http://brians-macbook-pro-2.local:8000"
+        #endif
     }()
     
     /// API version endpoint
@@ -31,6 +39,25 @@ struct Config {
     
     /// Target number of swings to record
     static let targetSwingCount = 3
+    
+    /// Frame capture interval for swing detection (in seconds)
+    static let stillCaptureInterval: TimeInterval = 0.2
+    
+    static let swingDetectConfidenceThreshold: Float = 0.75
+    
+    /// Convert images to black and white for faster processing
+    static let imageConvertBW = true
+    
+    /// Disable swing detection (bypass server queries)
+    static let disableSwingDetection = false
+    
+    // MARK: - Image Processing Configuration
+    
+    /// Target box size for resizing images (maintains aspect ratio)
+    static let imageMaxSize = CGSize(width: 128, height: 128)
+    
+    /// JPEG compression quality (0.0-1.0) - equivalent to WebP quality 40
+    static let imageJPEGQuality: CGFloat = 0.4
     
     // MARK: - TTS Cache Configuration
     
@@ -70,6 +97,15 @@ struct Config {
     
     /// Enable debug panel in the app
     static let isDebugPanelEnabled: Bool = {
+        #if DEBUG
+        return true
+        #else
+        return false
+        #endif
+    }()
+    
+    /// Delete all swing entries at launch (for debugging/testing)
+    static let deleteAllSwingEntriesAtLaunch: Bool = {
         #if DEBUG
         return true
         #else

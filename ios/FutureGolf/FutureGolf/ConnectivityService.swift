@@ -32,7 +32,7 @@ class ConnectivityService: ObservableObject {
     private var onConnectivityCallbacks: [UUID: () -> Void] = [:]
     
     // Server endpoint
-    private let serverHealthEndpoint = "\(Config.serverBaseURL)/health"
+    private let serverHealthEndpoint = "\(Config.apiBaseURL)/health"
     
     init() {
         // Initialization will be handled by startMonitoring

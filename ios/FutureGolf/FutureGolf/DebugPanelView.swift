@@ -61,8 +61,8 @@ struct DebugPanelView: View {
                     
                     VStack(spacing: 12) {
                         HStack {
-                            Text("Server URL:")
-                            Text(Config.serverBaseURL)
+                            Text("API URL:")
+                            Text(Config.apiBaseURL)
                                 .font(.system(.body, design: .monospaced))
                                 .foregroundColor(.secondary)
                         }
@@ -195,7 +195,7 @@ struct DebugPanelView: View {
         Task {
             do {
                 // Test health endpoint
-                let healthURL = URL(string: "\(Config.serverBaseURL)/health")!
+                let healthURL = URL(string: "\(Config.apiBaseURL)/health")!
                 var healthRequest = URLRequest(url: healthURL)
                 healthRequest.timeoutInterval = Config.healthCheckTimeout
                 
@@ -211,7 +211,7 @@ struct DebugPanelView: View {
                 
                 // Test TTS endpoint
                 let testPhrase = "Test connection"
-                let urlString = "\(Config.serverBaseURL)/api/v1/tts/coaching"
+                let urlString = "\(Config.apiBaseURL)/tts/coaching"
                 
                 guard let url = URL(string: urlString) else {
                     serverTestResult += "\n❌ Invalid TTS URL"
@@ -274,7 +274,7 @@ struct DebugPanelView: View {
         print("🐛 DEBUG: Testing health endpoint...")
         Task {
             do {
-                let url = URL(string: "\(Config.serverBaseURL)/health")!
+                let url = URL(string: "\(Config.apiBaseURL)/health")!
                 let (data, response) = try await URLSession.shared.data(from: url)
                 
                 if let httpResponse = response as? HTTPURLResponse {

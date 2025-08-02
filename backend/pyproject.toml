@@ -19,8 +19,6 @@ dependencies = [
     "protobuf<5,>=4.25.3",
     "psycopg2-binary==2.9.9",
     "pydantic==2.11.7",
-    "pytest==8.4.1",
-    "pytest-asyncio==1.1.0",
     "python-dotenv==1.1.1",
     "SQLAlchemy==2.0.41",
     "uvicorn==0.35.0",
@@ -33,6 +31,12 @@ dependencies = [
     "google-cloud-core==2.4.1",
     "opencv-python==4.10.0.84",
     "Pillow==11.0.0",
+    "langchain>=0.3.13",
+    "langchain-google-genai==2.0.7",
+    "langchain-core==0.3.28",
+    "websockets==14.1",
+    "google-generativeai>=0.8.3",
+    "pyyaml>=6.0.2",
 ]
 requires-python = "==3.10.*"
 readme = "README.md"
@@ -48,4 +52,25 @@ build-backend = "pdm.backend"
 
 
 [dependency-groups]
-test = ["pytest==7.4.3", "pytest-asyncio==0.21.1", "pytest-cov==4.1.0", "pytest-mock==3.12.0", "pytest-xdist==3.5.0", "pytest-html==4.1.1", "pytest-timeout==2.2.0", "httpx==0.27.0", "requests==2.31.0", "pytest-postgresql==5.0.0", "alembic==1.13.1", "factory-boy==3.3.0", "freezegun==1.2.2", "responses==0.24.1", "locust==2.20.0", "faker==22.0.0", "parameterized==0.9.0", "coverage==7.4.1", "coverage-badge==1.1.0", "locust==2.20.0", "bandit==1.7.5", "safety==2.3.5", "tavern==2.5.0"]
+test = [
+    "pytest==7.2.2",
+    "pytest-asyncio==0.21.1",
+    "pytest-cov==4.1.0",
+    "pytest-mock==3.12.0",
+    "pytest-xdist==3.5.0",
+    "pytest-html==4.1.1",
+    "pytest-timeout==2.2.0",
+    "httpx==0.28.1",
+    "requests==2.31.0",
+    "alembic==1.13.1",
+    "factory-boy==3.3.0",
+    "freezegun==1.2.2",
+    "responses==0.24.1",
+    "locust==2.20.0",
+    "faker==22.0.0",
+    "parameterized==0.9.0",
+    "coverage==7.4.1",
+    "coverage-badge==1.1.0",
+    "bandit==1.7.5",
+    "tavern==2.5.0",
+]

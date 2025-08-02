@@ -355,6 +355,7 @@ class VideoPlayerViewModel {
             player?.removeTimeObserver(timeObserver)
         }
         player?.pause()
+        isPlaying = false
         player = nil
         coachingTimer?.invalidate()
         synthesizer.stopSpeaking(at: .immediate)

@@ -13,11 +13,12 @@ from datetime import datetime
 import openai
 import os
 from dotenv import load_dotenv
+from config.api import API_VERSION_PREFIX
 
 # Load environment variables
 load_dotenv()
 
-router = APIRouter(prefix="/api/v1/recording", tags=["recording"])
+router = APIRouter(prefix=f"{API_VERSION_PREFIX}/recording", tags=["recording"])
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

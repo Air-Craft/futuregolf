@@ -15,10 +15,11 @@ from services.auth_utils import auth_utils
 from services.email_service import email_service
 from datetime import datetime
 import logging
+from config.api import API_VERSION_PREFIX
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
+router = APIRouter(prefix=f"{API_VERSION_PREFIX}/auth", tags=["authentication"])
 
 
 @router.post("/register", response_model=RegistrationResponse)

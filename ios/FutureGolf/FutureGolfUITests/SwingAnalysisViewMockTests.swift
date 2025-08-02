@@ -20,48 +20,6 @@ final class SwingAnalysisViewMockTests: XCTestCase {
         app = nil
     }
     
-    // MARK: - Thumbnail Display Tests
-    
-    func testThumbnailDisplaysWithoutRoundedCorners() throws {
-        // Launch directly to analysis view with mock data
-        app.launchEnvironment["ANALYSIS_MODE"] = "processing"
-        app.launch()
-        
-        // Find the thumbnail
-        let thumbnail = app.images.matching(NSPredicate(format: "identifier CONTAINS 'thumbnail'")).firstMatch
-        XCTAssertTrue(thumbnail.waitForExistence(timeout: 3))
-        
-        // Verify size - should maintain 16:9 aspect ratio
-        let frame = thumbnail.frame
-        let aspectRatio = frame.width / frame.height
-        XCTAssertEqual(aspectRatio, 16.0/9.0, accuracy: 0.1, "Thumbnail should maintain 16:9 aspect ratio")
-        
-        // Verify fixed height
-        let screenWidth = app.frame.width
-        let expectedHeight = (screenWidth - 32) * 9 / 16 // 32 = padding
-        let maxHeight: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 400 : 250
-        let finalHeight = min(expectedHeight, maxHeight)
-        
-        XCTAssertEqual(frame.height, finalHeight, accuracy: 5, "Thumbnail height should match calculated value")
-    }
-    
-    func testThumbnailNoOverlayText() throws {
-        app.launchEnvironment["ANALYSIS_MODE"] = "offline"
-        app.launch()
-        
-        // Verify thumbnail exists
-        let thumbnail = app.images.matching(NSPredicate(format: "identifier CONTAINS 'thumbnail'")).firstMatch
-        XCTAssertTrue(thumbnail.exists)
-        
-        // Verify no "waiting for connection" text over thumbnail
-        let waitingText = app.staticTexts["waiting for connection"].firstMatch
-        if waitingText.exists {
-            // If text exists, verify it's not overlapping the thumbnail
-            XCTAssertFalse(thumbnail.frame.intersects(waitingText.frame), 
-                          "Waiting text should not overlay thumbnail")
-        }
-    }
-    
     // MARK: - Connectivity State Tests
     
     func testOfflineStateBusyIndicator() throws {

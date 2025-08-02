@@ -13,8 +13,9 @@ from models.video import Video, VideoStatus
 from services.storage_service import get_storage_service
 from services.video_analysis_service import get_clean_video_analysis_service
 from config.storage import storage_config
+from config.api import API_VERSION_PREFIX
 
-router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
+router = APIRouter(prefix=f"{API_VERSION_PREFIX}/videos", tags=["videos"])
 security = HTTPBearer()
 logger = logging.getLogger(__name__)
 

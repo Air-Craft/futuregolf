@@ -1,4 +1,5 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
       "Bash(find:*)",
@@ -58,7 +59,11 @@
       "Bash(xcrun simctl shutdown:*)",
       "Bash(xcrun simctl device booted spawn:*)",
       "Bash(xcrun simctl terminate:*)",
-      "Bash(plutil:*)"
+      "Bash(plutil:*)",
+      "Bash(pdm run:*)",
+      "Bash(pdm lock:*)",
+      "Bash(git add:*)",
+      "Bash(pdm run:*)"
     ],
     "deny": []
   },
