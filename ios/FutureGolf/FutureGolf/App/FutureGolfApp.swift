@@ -27,7 +27,8 @@ struct FutureGolfApp: App {
                 // For UI testing - go directly to SwingAnalysisView
                 SwingAnalysisView(
                     videoURL: getTestVideoURL(),
-                    analysisId: "test-analysis-001"
+                    analysisId: "test-analysis-001",
+                    dependencies: deps
                 )
                 .withToastOverlay()
                 .onAppear {

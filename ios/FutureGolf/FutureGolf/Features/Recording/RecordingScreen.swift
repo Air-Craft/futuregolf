@@ -102,7 +102,7 @@ struct RecordingScreen: View {
             }
         }
         .navigationDestination(isPresented: $shouldNavigateToAnalysis) {
-            SwingAnalysisView()
+            SwingAnalysisView(dependencies: deps)
                 .environmentObject(deps)
         }
         .confirmationDialog("Cancel Recording", isPresented: $showCancelConfirmation) {

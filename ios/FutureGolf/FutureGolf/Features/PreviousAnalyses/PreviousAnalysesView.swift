@@ -192,7 +192,8 @@ struct AnalysisRow: View {
             NavigationStack {
                 SwingAnalysisView(
                     videoURL: analysis.videoURL,
-                    analysisId: analysis.id
+                    analysisId: analysis.id,
+                    dependencies: deps
                 )
                 .environmentObject(deps)
                 .environmentObject(deps.analysisStorage)
