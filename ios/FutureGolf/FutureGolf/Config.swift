@@ -1,6 +1,37 @@
 import Foundation
 
 struct Config {
+    // MARK: - Debug Configuration Helpers
+    
+    struct DebugConfig {
+        /// Returns debug value in DEBUG builds, release value otherwise
+        static func value<T>(_ debugVal: T, release releaseVal: T) -> T {
+            #if DEBUG
+            return debugVal
+            #else
+            return releaseVal
+            #endif
+        }
+        
+        /// Returns value in DEBUG builds, default value otherwise
+        static func debugOnly<T>(_ value: T, default defaultValue: T) -> T {
+            #if DEBUG
+            return value
+            #else
+            return defaultValue
+            #endif
+        }
+        
+        /// Returns true in DEBUG builds, false otherwise
+        static var isDebug: Bool {
+            #if DEBUG
+            return true
+            #else
+            return false
+            #endif
+        }
+    }
+    
     // MARK: - API Configuration
     
     /// The base URL for the backend API server
@@ -43,7 +74,7 @@ struct Config {
     /// Frame capture interval for swing detection (in seconds)
     static let stillCaptureInterval: TimeInterval = 0.2
     
-    static let swingDetectConfidenceThreshold: Float = 0.75
+    static let swingDetectConfidenceThreshold: Float = 0.70
     
     /// Convert images to black and white for faster processing
     static let imageConvertBW = true
@@ -87,31 +118,13 @@ struct Config {
     // MARK: - Debug Configuration
     
     /// Enable debug logging
-    static let isDebugEnabled: Bool = {
-        #if DEBUG
-        return true
-        #else
-        return false
-        #endif
-    }()
+    static let isDebugEnabled = DebugConfig.debugOnly(true, default: false)
     
     /// Enable debug panel in the app
-    static let isDebugPanelEnabled: Bool = {
-        #if DEBUG
-        return true
-        #else
-        return false
-        #endif
-    }()
+    static let isDebugPanelEnabled = DebugConfig.debugOnly(true, default: false)
     
     /// Delete all swing entries at launch (for debugging/testing)
-    static let deleteAllSwingEntriesAtLaunch: Bool = {
-        #if DEBUG
-        return true
-        #else
-        return false
-        #endif
-    }()
+    static let deleteAllSwingEntriesAtLaunch = DebugConfig.debugOnly(true, default: false)
     
     // MARK: - Convenience Methods
     
