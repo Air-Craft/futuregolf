@@ -70,20 +70,6 @@
 			);
 			target = 37361DDF2E33FCC900909D7E /* FutureGolf */;
 		};
-		D3AF1B3A2E38E86B0024673F /* Exceptions for "FutureGolf" folder in "FutureGolfTests" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				home_bg_video.mp4,
-			);
-			target = 37361DEC2E33FCCA00909D7E /* FutureGolfTests */;
-		};
-		D3AF1B3B2E38E86B0024673F /* Exceptions for "FutureGolf" folder in "FutureGolfUITests" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				home_bg_video.mp4,
-			);
-			target = 37361DF62E33FCCA00909D7E /* FutureGolfUITests */;
-		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -91,8 +77,6 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				D34969642E3D2598001D0B00 /* Exceptions for "FutureGolf" folder in "FutureGolf" target */,
-				D3AF1B3A2E38E86B0024673F /* Exceptions for "FutureGolf" folder in "FutureGolfTests" target */,
-				D3AF1B3B2E38E86B0024673F /* Exceptions for "FutureGolf" folder in "FutureGolfUITests" target */,
 			);
 			path = FutureGolf;
 			sourceTree = "<group>";

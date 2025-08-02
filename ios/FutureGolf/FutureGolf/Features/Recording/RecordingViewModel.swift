@@ -44,16 +44,6 @@ struct ProgressCircle: Identifiable {
     var isCompleted: Bool = false
 }
 
-// MARK: - Camera Configuration
-enum CameraConfiguration {
-    static let preferredFrameRate: Double = 60.0  // Try for 60fps when device supports it
-    static let fallbackFrameRate: Double = 30.0   // Fallback to 30fps
-    static let minFrameRate: Double = 24.0        // Minimum acceptable frame rate
-    static let resolution = AVCaptureSession.Preset.hd1920x1080
-    static let videoFormat = AVFileType.mp4
-    static let stillCaptureInterval: TimeInterval = Config.stillCaptureInterval
-}
-
 @MainActor
 @Observable
 class RecordingViewModel: NSObject {
@@ -85,14 +75,7 @@ class RecordingViewModel: NSObject {
     private var recordingSessionId = UUID()  // Unique ID for each recording session
     
     // MARK: - Camera Properties
-    var preferredFrameRate: Double { CameraConfiguration.preferredFrameRate }
-    var fallbackFrameRate: Double { CameraConfiguration.fallbackFrameRate }
-    var minFrameRate: Double { CameraConfiguration.minFrameRate }
-    var resolution: AVCaptureSession.Preset { CameraConfiguration.resolution }
-    var videoFormat: AVFileType { CameraConfiguration.videoFormat }
     var deviceOrientation: UIDeviceOrientation = .portrait
-    var isAutoFocusEnabled = true
-    var focusMode: AVCaptureDevice.FocusMode = .continuousAutoFocus
     var stillCaptureInterval: TimeInterval = Config.stillCaptureInterval // Capture every 0.35s as requested
     var recordingTimeout: TimeInterval { Config.recordingTimeout }
     
@@ -105,14 +88,13 @@ class RecordingViewModel: NSObject {
     private let recordingAPIService = RecordingAPIService.shared
     private let onDeviceSTT = OnDeviceSTTService.shared
     private let swingDetectionWS = SwingDetectionWebSocketService()
+    private let cameraService = CameraService()
     
     // MARK: - Camera Session
-    var captureSession: AVCaptureSession?
+    var captureSession: AVCaptureSession? {
+        return cameraService.captureSession
+    }
     private var videoOutput: AVCaptureMovieFileOutput?
-    private var videoDataOutput: AVCaptureVideoDataOutput?
-    private var currentCamera: AVCaptureDevice?
-    private var videoInput: AVCaptureDeviceInput?
-    private let videoDataOutputQueue = DispatchQueue(label: "com.futuregolf.videodataoutput")
     
     // MARK: - Audio Feedback
     private var swingTonePlayer: AVAudioPlayer?
@@ -136,7 +118,6 @@ class RecordingViewModel: NSObject {
         self.dependencies = dependencies
         super.init()
         
-        // Enhanced error logging for debugging
         print("🐛 RecordingViewModel: Initializing...")
         
         setupProgressCircles()
@@ -145,28 +126,21 @@ class RecordingViewModel: NSObject {
         setupVoiceCommands()
         print("🐛 RecordingViewModel: Voice commands setup completed")
         
-        // Start API session
         let sessionId = recordingAPIService.startSession()
         print("🐛 RecordingViewModel: API session started with ID: \(sessionId)")
         
-        // Setup WebSocket callbacks
         setupWebSocketCallbacks()
-        
-        // Setup audio tones
         setupAudioTones()
+        
+        cameraService.onFrameCaptured = { [weak self] image in
+            self?.handleCapturedFrame(image)
+        }
     }
     
     // MARK: - Setup Methods
     
     private func setupAudioTones() {
-        // Prepare system sounds for quick playback
         // Using system sounds for better performance and lower latency
-        
-        // For now, we'll use system sounds, but you can add custom sound files later
-        // To add custom sounds:
-        // 1. Add .wav or .aiff files to the project
-        // 2. Load them with: Bundle.main.url(forResource: "swing", withExtension: "wav")
-        // 3. Create AVAudioPlayer instances with those URLs
     }
     
     private func setupProgressCircles() {
@@ -174,7 +148,6 @@ class RecordingViewModel: NSObject {
     }
     
     private func setupVoiceCommands() {
-        // Listen for voice commands from the on-device STT service
         voiceCommandCancellable = onDeviceSTT.$lastCommand
             .compactMap { $0 }
             .sink { [weak self] command in
@@ -185,355 +158,36 @@ class RecordingViewModel: NSObject {
     private func handleVoiceCommand(_ command: VoiceCommand) {
         switch command {
         case .startRecording:
-            guard currentPhase == .setup else { 
-                print("⚠️ Ignoring start command - not in setup phase (current: \(currentPhase))")
-                return 
-            }
-            guard !isRecording else {
-                print("⚠️ Ignoring start command - already recording")
-                return
-            }
+            guard currentPhase == .setup, !isRecording else { return }
             print("🎤 Voice command received: Start Recording")
             startRecording()
         case .stopRecording:
-            guard currentPhase == .recording else { 
-                print("⚠️ Ignoring stop command - not in recording phase (current: \(currentPhase))")
-                return 
-            }
+            guard currentPhase == .recording else { return }
             print("🎤 Voice command received: Stop Recording")
             finishRecording()
         }
     }
     
     private func setupWebSocketCallbacks() {
-        // Setup WebSocket callbacks
         swingDetectionWS.onSwingDetected = { [weak self] confidence in
             Task { @MainActor in
                 self?.processSwingDetection(isSwingDetected: true, confidence: confidence)
             }
         }
         
-        // Note: Server no longer sends test_complete - client decides when to stop
-        // This callback is kept for compatibility but won't be called
-        
-        swingDetectionWS.onError = { [weak self] error in
+        swingDetectionWS.onError = { error in
             print("❌ WebSocket error: \(error)")
-            // Fallback to REST API if WebSocket fails
         }
     }
     
     func setupCamera() async throws {
-        print("🐛 RecordingViewModel: Starting camera setup...")
-        
-        captureSession = AVCaptureSession()
-        
-        guard let session = captureSession else {
-            print("🐛 RecordingViewModel: Failed to create capture session")
-            throw RecordingError.cameraHardwareError
-        }
-        
-        print("🐛 RecordingViewModel: Capture session created successfully")
-        
-        // Check camera permission
-        let cameraAuthStatus = AVCaptureDevice.authorizationStatus(for: .video)
-        print("🐛 RecordingViewModel: Camera permission status: \(cameraAuthStatus.rawValue)")
-        
-        if cameraAuthStatus != .authorized {
-            if cameraAuthStatus == .notDetermined {
-                print("🐛 RecordingViewModel: Requesting camera permission...")
-                let granted = await AVCaptureDevice.requestAccess(for: .video)
-                print("🐛 RecordingViewModel: Camera permission granted: \(granted)")
-                if !granted {
-                    throw RecordingError.cameraPermissionDenied
-                }
-            } else {
-                print("🐛 RecordingViewModel: Camera permission denied or restricted")
-                throw RecordingError.cameraPermissionDenied
-            }
-        }
-        
-        print("🐛 RecordingViewModel: Starting session configuration...")
-        session.beginConfiguration()
-        
-        // Set session preset
-        if session.canSetSessionPreset(resolution) {
-            session.sessionPreset = resolution
-            print("🐛 RecordingViewModel: Session preset set to: \(resolution.rawValue)")
-        } else {
-            print("🐛 RecordingViewModel: Warning - Could not set session preset to: \(resolution.rawValue)")
-        }
-        
-        do {
-            // Setup camera input
-            print("🐛 RecordingViewModel: Setting up camera input...")
-            try setupCameraInput(for: cameraPosition)
-            print("🐛 RecordingViewModel: Camera input setup completed")
-            
-            // Setup video output
-            print("🐛 RecordingViewModel: Setting up video output...")
-            setupVideoOutput()
-            print("🐛 RecordingViewModel: Video output setup completed")
-            
-            // Setup video data output for silent frame capture
-            print("🐛 RecordingViewModel: Setting up video data output...")
-            setupVideoDataOutput()
-            print("🐛 RecordingViewModel: Video data output setup completed")
-            
-        } catch {
-            print("🐛 RecordingViewModel: Camera setup error: \(error)")
-            session.commitConfiguration()
-            throw error
-        }
-        
-        session.commitConfiguration()
-        print("🐛 RecordingViewModel: Camera setup completed successfully")
-    }
-    
-    private func setupCameraInput(for position: AVCaptureDevice.Position) throws {
-        guard let session = captureSession else { return }
-        
-        // Remove existing input
-        if let existingInput = videoInput {
-            session.removeInput(existingInput)
-        }
-        
-        // Get camera for position using the standard method
-        var camera: AVCaptureDevice?
-        
-        // Try wide angle camera first
-        camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position)
-        
-        if camera == nil {
-            print("🐛 RecordingViewModel: No wide angle camera found for position: \(position)")
-            // Fallback to any available camera
-            camera = AVCaptureDevice.default(for: .video)
-            print("🐛 RecordingViewModel: Using fallback camera")
-        } else {
-            print("🐛 RecordingViewModel: Using built-in wide angle camera")
-        }
-        
-        guard let camera = camera else {
-            print("🐛 RecordingViewModel: No camera available at all")
-            throw RecordingError.cameraHardwareError
-        }
-        
-        currentCamera = camera
-        
-        // Configure camera settings with advanced 60fps detection
-        do {
-            try camera.lockForConfiguration()
-            
-            let (bestFormat, achievedFrameRate) = findBestCameraFormat(for: camera, position: position)
-            
-            if let format = bestFormat {
-                print("🐛 RecordingViewModel: Setting optimal format for \(achievedFrameRate)fps")
-                camera.activeFormat = format
-                
-                // Set the frame rate
-                let frameDuration = CMTime(value: 1, timescale: Int32(achievedFrameRate))
-                if frameDuration.isValid && !frameDuration.isIndefinite {
-                    camera.activeVideoMinFrameDuration = frameDuration
-                    camera.activeVideoMaxFrameDuration = frameDuration
-                    
-                    // Update the actual achieved frame rate for UI display
-                    self.currentFrameRate = achievedFrameRate
-                    
-                    print("🐛 RecordingViewModel: Successfully configured camera for \(achievedFrameRate)fps")
-                } else {
-                    print("🐛 RecordingViewModel: Invalid frame duration, using device defaults")
-                    self.currentFrameRate = 30.0 // Default fallback
-                }
-            } else {
-                print("🐛 RecordingViewModel: No suitable format found, using device defaults")
-                self.currentFrameRate = 30.0 // Default fallback
-            }
-            
-            // Set focus mode
-            if camera.isFocusModeSupported(focusMode) {
-                camera.focusMode = focusMode
-            }
-            
-            // Set exposure mode
-            if camera.isExposureModeSupported(.continuousAutoExposure) {
-                camera.exposureMode = .continuousAutoExposure
-            }
-            
-        } catch {
-            print("🐛 RecordingViewModel: Error configuring camera: \(error)")
-            camera.unlockForConfiguration()
-            throw RecordingError.cameraHardwareError
-        }
-        
-        camera.unlockForConfiguration()
-        
-        // Create input
-        let input = try AVCaptureDeviceInput(device: camera)
-        
-        if session.canAddInput(input) {
-            session.addInput(input)
-            videoInput = input
-        } else {
-            throw RecordingError.cameraHardwareError
-        }
-    }
-    
-    // MARK: - Advanced Camera Format Detection
-    
-    private func findBestCameraFormat(for camera: AVCaptureDevice, position: AVCaptureDevice.Position) -> (AVCaptureDevice.Format?, Double) {
-        let cameraName = position == .front ? "Front" : "Back"
-        print("🐛 RecordingViewModel: Analyzing \(cameraName) camera formats for optimal frame rate...")
-        
-        var bestFormat: AVCaptureDevice.Format?
-        var achievedFrameRate: Double = fallbackFrameRate
-        
-        // Priority order: try for 60fps first, then fallback to 30fps, then device max
-        let targetRates = [preferredFrameRate, fallbackFrameRate]
-        
-        for targetRate in targetRates {
-            print("🐛 RecordingViewModel: Searching for format supporting \(targetRate)fps...")
-            
-            for format in camera.formats {
-                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                let frameRateRanges = format.videoSupportedFrameRateRanges
-                
-                // Look for 1080p or higher resolution formats
-                let isHighRes = dimensions.width >= 1920 && dimensions.height >= 1080
-                
-                for range in frameRateRanges {
-                    if range.maxFrameRate >= targetRate && range.minFrameRate <= targetRate {
-                        // Found a format that supports our target frame rate
-                        let formatInfo = "Format: \(dimensions.width)x\(dimensions.height), FPS: \(range.minFrameRate)-\(range.maxFrameRate)"
-                        print("🐛 RecordingViewModel: Found compatible format - \(formatInfo)")
-                        
-                        // Prefer higher resolution if frame rate is supported
-                        if bestFormat == nil || (isHighRes && !isFormatHighRes(bestFormat!)) {
-                            bestFormat = format
-                            achievedFrameRate = targetRate
-                            print("🐛 RecordingViewModel: Selected format for \(targetRate)fps - \(formatInfo)")
-                        }
-                    }
-                }
-                
-                if bestFormat != nil && achievedFrameRate == preferredFrameRate {
-                    // Found 60fps format, no need to continue searching
-                    break
-                }
-            }
-            
-            if bestFormat != nil {
-                // Found a suitable format at this frame rate
-                break
-            }
-        }
-        
-        // If no format found, find the highest frame rate available
-        if bestFormat == nil {
-            print("🐛 RecordingViewModel: No format found for target rates, finding best available...")
-            var maxAvailableFrameRate: Double = 0
-            
-            for format in camera.formats {
-                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                let frameRateRanges = format.videoSupportedFrameRateRanges
-                
-                // Prefer 1080p or higher
-                let isHighRes = dimensions.width >= 1920 && dimensions.height >= 1080
-                
-                for range in frameRateRanges {
-                    if range.maxFrameRate > maxAvailableFrameRate ||
-                       (range.maxFrameRate == maxAvailableFrameRate && isHighRes && (bestFormat == nil || !isFormatHighRes(bestFormat!))) {
-                        bestFormat = format
-                        maxAvailableFrameRate = range.maxFrameRate
-                        achievedFrameRate = range.maxFrameRate
-                    }
-                }
-            }
-            
-            if let format = bestFormat {
-                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                print("🐛 RecordingViewModel: Using best available format: \(dimensions.width)x\(dimensions.height) at \(achievedFrameRate)fps")
-            }
-        }
-        
-        if bestFormat == nil {
-            print("🐛 RecordingViewModel: Warning - No suitable format found, using device default")
-            achievedFrameRate = fallbackFrameRate
-        }
-        
-        return (bestFormat, achievedFrameRate)
-    }
-    
-    private func isFormatHighRes(_ format: AVCaptureDevice.Format) -> Bool {
-        let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-        return dimensions.width >= 1920 && dimensions.height >= 1080
+        try await cameraService.setupCamera(for: cameraPosition)
     }
     
     // MARK: - Orientation Handling
     
-    private func updateVideoOrientation(for connection: AVCaptureConnection) {
-        if #available(iOS 17.0, *) {
-            guard connection.isVideoRotationAngleSupported(0) else {
-                return
-            }
-        } else {
-            guard connection.isVideoOrientationSupported else {
-                return
-            }
-        }
-        
-        let orientation = deviceOrientation
-        
-        if #available(iOS 17.0, *) {
-            let angle: CGFloat
-            switch orientation {
-            case .portrait:
-                angle = 90
-            case .portraitUpsideDown:
-                angle = 270
-            case .landscapeLeft:
-                angle = 0
-            case .landscapeRight:
-                angle = 180
-            default:
-                angle = 90 // Default to portrait
-            }
-            
-            if connection.isVideoRotationAngleSupported(angle) {
-                connection.videoRotationAngle = angle
-            }
-        } else {
-            let videoOrientation: AVCaptureVideoOrientation
-            switch orientation {
-            case .portrait:
-                videoOrientation = .portrait
-            case .portraitUpsideDown:
-                videoOrientation = .portraitUpsideDown
-            case .landscapeLeft:
-                videoOrientation = .landscapeRight // Note: these are swapped
-            case .landscapeRight:
-                videoOrientation = .landscapeLeft  // Note: these are swapped
-            default:
-                videoOrientation = .portrait
-            }
-            
-            connection.videoOrientation = videoOrientation
-        }
-    }
-    
     func updateOrientation(_ orientation: UIDeviceOrientation) {
-        guard orientation != .unknown && orientation != .faceUp && orientation != .faceDown else {
-            return
-        }
-        
-        deviceOrientation = orientation
-        
-        // Update all video connections
-        if let videoConnection = videoOutput?.connection(with: .video) {
-            updateVideoOrientation(for: videoConnection)
-        }
-        
-        if let dataConnection = videoDataOutput?.connection(with: .video) {
-            updateVideoOrientation(for: dataConnection)
-        }
+        // This will be handled by the view and passed to the CameraService
     }
     
     private func setupVideoOutput() {
@@ -544,42 +198,9 @@ class RecordingViewModel: NSObject {
         if let output = videoOutput, session.canAddOutput(output) {
             session.addOutput(output)
             
-            // Configure video connection
             if let connection = output.connection(with: .video) {
                 if connection.isVideoStabilizationSupported {
                     connection.preferredVideoStabilizationMode = .auto
-                }
-                
-                // Set video orientation based on device orientation
-                updateVideoOrientation(for: connection)
-            }
-        }
-    }
-    
-    private func setupVideoDataOutput() {
-        guard let session = captureSession else { return }
-        
-        videoDataOutput = AVCaptureVideoDataOutput()
-        
-        if let output = videoDataOutput {
-            // Configure pixel format for optimal performance
-            output.videoSettings = [
-                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
-            ]
-            
-            // Discard late frames to avoid blocking
-            output.alwaysDiscardsLateVideoFrames = true
-            
-            // Set delegate for frame processing
-            output.setSampleBufferDelegate(self, queue: videoDataOutputQueue)
-            
-            if session.canAddOutput(output) {
-                session.addOutput(output)
-                
-                // Configure connection
-                if let connection = output.connection(with: .video) {
-                    // Set video orientation based on device orientation
-                    updateVideoOrientation(for: connection)
                 }
             }
         }
@@ -588,12 +209,8 @@ class RecordingViewModel: NSObject {
     // MARK: - Camera Control Methods
     
     func switchCamera() {
-        let newPosition: AVCaptureDevice.Position = (cameraPosition == .back) ? .front : .back
-        cameraPosition = newPosition
-        
-        Task {
-            try? setupCameraInput(for: newPosition)
-        }
+        cameraService.switchCamera()
+        self.cameraPosition = cameraService.cameraPosition
     }
     
     func toggleLeftHandedMode() {
@@ -601,72 +218,41 @@ class RecordingViewModel: NSObject {
     }
     
     func setZoomLevel(_ zoom: CGFloat) {
-        guard let device = currentCamera else { return }
-        
-        do {
-            try device.lockForConfiguration()
-            
-            // Calculate the zoom factor
-            let maxZoom = min(device.activeFormat.videoMaxZoomFactor, 4.0)
-            let scaledZoom = 1.0 + (1.0 - zoom) * (maxZoom - 1.0)
-            
-            device.videoZoomFactor = scaledZoom
-            
-            device.unlockForConfiguration()
-        } catch {
-            print("Error setting zoom level: \(error)")
-        }
+        cameraService.setZoomLevel(zoom)
     }
     
     // MARK: - Recording Control Methods
     
     func startRecording() {
-        guard currentPhase == .setup else { 
-            print("⚠️ Ignoring startRecording call - not in setup phase (current: \(currentPhase))")
-            return 
-        }
+        guard currentPhase == .setup else { return }
         
-        // Generate new session ID for this recording
         recordingSessionId = UUID()
         print("🎬 Starting new recording session: \(recordingSessionId)")
         
-        // Log audio configuration for debugging
-        print("🎧 Current audio route at recording start:")
-        print(AudioRouteManager.shared.getCurrentRouteInfo())
-        
         currentPhase = .recording
         isRecording = true
-        isProcessingEnabled = true  // Enable photo processing
+        isProcessingEnabled = true
         showPositioningIndicator = false
-        showProgressCircles = !Config.disableSwingDetection  // Only show progress circles if swing detection is enabled
+        showProgressCircles = !Config.disableSwingDetection
         recordingTime = 0
         swingCount = 0
-        capturedFramesBuffer.removeAll()  // Clear buffer
+        capturedFramesBuffer.removeAll()
         
-        // Reset progress circles
         for i in 0..<progressCircles.count {
             progressCircles[i].isCompleted = false
         }
         
-        // Connect WebSocket for swing detection (if enabled)
         if !Config.disableSwingDetection {
             swingDetectionWS.connect()
             swingDetectionWS.beginDetection()
         }
         
-        // Start recording video
         startVideoRecording()
-        
-        // Start timers
         startStillCaptureTimer()
         startTimeoutTimer()
         
-        // Temporarily stop listening for voice commands while TTS is playing
         onDeviceSTT.stopListening()
-        
-        // Play TTS confirmation
         ttsService.speakText("Great. I'm now recording. Begin swinging when you're ready.") { [weak self] _ in
-            // Resume listening after TTS completes
             self?.onDeviceSTT.startListening()
         }
         
@@ -676,60 +262,33 @@ class RecordingViewModel: NSObject {
     func finishRecording() {
         guard currentPhase == .recording else { return }
         
-        print("🏁 Finishing recording - stopping all processing")
+        print("🏁 Finishing recording")
         
-        // Stop all timers FIRST to prevent any more captures
         stopAllTimers()
-        
-        // Clear any pending frame captures
         shouldCaptureNextFrame = false
-        
         isRecording = false
-        isProcessingEnabled = false  // Disable photo processing immediately
+        isProcessingEnabled = false
         showProgressCircles = false
         
-        // Cancel all active analysis tasks
-        print("🏁 Cancelling \(activeAnalysisTasks.count) active analysis tasks")
-        for task in activeAnalysisTasks {
-            task.cancel()
-        }
+        activeAnalysisTasks.forEach { $0.cancel() }
         activeAnalysisTasks.removeAll()
         
-        // Stop video data output to prevent any more frames
-        if let dataOutput = videoDataOutput {
-            dataOutput.setSampleBufferDelegate(nil, queue: nil)
-        }
-        
-        // Stop video recording
         stopVideoRecording()
-        
-        // IMPORTANT: Stop voice recognition BEFORE playing any TTS to prevent feedback
         onDeviceSTT.stopListening()
-        stopVoiceRecognition()
         
-        // End swing detection
         if !Config.disableSwingDetection {
             swingDetectionWS.endDetection()
-            // Give WebSocket time to close cleanly
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 self?.swingDetectionWS.disconnect()
             }
         }
         
-        // Set phase to processing only after video URL is available
-        // This will be done in the delegate callback
-        
-        // Play completion TTS (STT is already stopped, so no feedback loop)
         ttsService.speakText("That's great. I'll get to work analyzing your swings.")
     }
     
     private func startVideoRecording() {
         guard let output = videoOutput else { return }
-        
-        // Create output file URL
         let outputURL = createOutputFileURL()
-        
-        // Start recording
         output.startRecording(to: outputURL, recordingDelegate: self)
     }
     
@@ -749,20 +308,7 @@ class RecordingViewModel: NSObject {
         let currentSessionId = recordingSessionId
         stillCaptureTimer = Timer.scheduledTimer(withTimeInterval: stillCaptureInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                guard let self = self else { return }
-                
-                // Check if this is still the active recording session
-                guard self.recordingSessionId == currentSessionId else {
-                    print("🛑 Ignoring timer from old session")
-                    return
-                }
-                
-                // Double-check we're still in recording phase
-                guard self.currentPhase == .recording,
-                      self.isProcessingEnabled == true else {
-                    print("🛑 Skipping frame capture - not in recording phase or processing disabled")
-                    return
-                }
+                guard let self = self, self.recordingSessionId == currentSessionId, self.currentPhase == .recording, self.isProcessingEnabled else { return }
                 self.captureStillForAnalysis()
             }
         }
@@ -779,7 +325,6 @@ class RecordingViewModel: NSObject {
     private func stopAllTimers() {
         stillCaptureTimer?.invalidate()
         stillCaptureTimer = nil
-        
         timeoutTimer?.invalidate()
         timeoutTimer = nil
     }
@@ -788,15 +333,10 @@ class RecordingViewModel: NSObject {
     
     func startVoiceRecognition() async throws {
         print("🐛 RecordingViewModel: Starting on-device voice recognition...")
-        
-        // Request permissions for the on-device STT service
         let hasPermissions = await onDeviceSTT.requestPermissions()
-        
         if !hasPermissions {
             throw RecordingError.audioPermissionDenied
         }
-        
-        // Start listening for voice commands
         onDeviceSTT.startListening()
     }
     
@@ -804,34 +344,33 @@ class RecordingViewModel: NSObject {
         onDeviceSTT.stopListening()
     }
     
-    // Voice processing is now handled by OnDeviceSTTService
-    // Commands are processed in handleVoiceCommand() method
-    
     // MARK: - Still Capture Methods
     
     func captureStillForAnalysis() {
-        guard currentPhase == .recording,
-              isProcessingEnabled else {
-            print("🛑 Skipping frame capture request - not in recording phase or processing disabled")
-            return
-        }
-        
-        // Set flag to capture next video frame
+        guard currentPhase == .recording, isProcessingEnabled else { return }
         shouldCaptureNextFrame = true
+    }
+    
+    private func handleCapturedFrame(_ image: UIImage) {
+        guard shouldCaptureNextFrame, isProcessingEnabled, currentPhase == .recording else { return }
+        
+        shouldCaptureNextFrame = false
+        lastFrameCaptureTime = Date().timeIntervalSince1970
+        
+        print("🎥 Capturing frame for swing analysis at time: \(lastFrameCaptureTime)")
+        
+        onStillCaptured?(image)
+        processStillImage(image)
     }
     
     // MARK: - Audio Feedback Methods
     
     private func playSwingTone() {
-        // Play a short tone to indicate swing detected
-        // Using system sound for low latency
-        AudioServicesPlaySystemSound(1057) // System sound ID for "Tink"
+        AudioServicesPlaySystemSound(1057) // "Tink"
     }
     
     private func playCompletionTone() {
-        // Play a different tone to indicate all swings complete
-        // Using system sound for low latency
-        AudioServicesPlaySystemSound(1025) // System sound ID for "Complete"
+        AudioServicesPlaySystemSound(1025) // "Complete"
     }
     
     // MARK: - Swing Detection Methods
@@ -842,17 +381,13 @@ class RecordingViewModel: NSObject {
         swingCount += 1
         print("🏌️ Swing \(swingCount) detected with confidence: \(confidence)!")
         
-        // Update progress circle
         if swingCount <= progressCircles.count {
             progressCircles[swingCount - 1].isCompleted = true
         }
         
-        // Play swing detection tone
         playSwingTone()
         
-        // Provide audio feedback
         if swingCount == 1 {
-            // Temporarily pause voice recognition during TTS
             onDeviceSTT.stopListening()
             ttsService.speakText("Great. Take another when you're ready.") { [weak self] _ in
                 self?.onDeviceSTT.startListening()
@@ -860,93 +395,50 @@ class RecordingViewModel: NSObject {
         } else if swingCount == 2 {
             ttsService.speakText("Ok one more to go.")
         } else if swingCount >= targetSwingCount {
-            // Play completion tone before finishing
             playCompletionTone()
             finishRecording()
         }
     }
     
     func processStillImage(_ image: UIImage) {
-        // Only process if enabled
-        guard isProcessingEnabled else {
-            print("🛑 Skipping still image processing - processing disabled")
-            return
-        }
-        
-        let frameToSend = image
+        guard isProcessingEnabled else { return }
         
         print("🖼️ Sending frame for analysis...")
         
-        // Send to server for swing detection
         let task = Task { [weak self] in
-            guard let self = self else { return }
+            guard let self = self, self.isProcessingEnabled else { return }
             
             do {
-                // Check again before making network request
-                guard self.isProcessingEnabled else {
-                    print("🛑 Aborting swing analysis - processing disabled")
-                    return
-                }
-                
-                let isSwingDetected = try await self.analyzeStillForSwing(frameToSend)
-                
-                // Check one more time before processing result
-                await MainActor.run {
-                    guard self.isProcessingEnabled else {
-                        print("🛑 Ignoring swing detection result - processing disabled")
-                        return
-                    }
-                    self.processSwingDetection(isSwingDetected: isSwingDetected, confidence: 0.0)
-                }
+                let isSwingDetected = try await self.analyzeStillForSwing(image)
+                guard self.isProcessingEnabled else { return }
+                self.processSwingDetection(isSwingDetected: isSwingDetected, confidence: 0.0)
             } catch {
                 print("🚨 Error analyzing still image: \(error)")
             }
         }
         
-        // Track the task
         activeAnalysisTasks.insert(task)
-        
-        // Clean up completed task after it finishes
         Task { [weak self] in
             await task.value
             await MainActor.run {
-                _ = self?.activeAnalysisTasks.remove(task)
+                self?.activeAnalysisTasks.remove(task)
             }
         }
     }
     
-    private var stillSequenceNumber = 0
-    
     private func analyzeStillForSwing(_ image: UIImage) async throws -> Bool {
-        // Check if task is cancelled
         try Task.checkCancellation()
+        guard isProcessingEnabled else { throw CancellationError() }
+        if Config.disableSwingDetection { return false }
         
-        stillSequenceNumber += 1
-        
-        // Check if processing is still enabled before making network request
-        guard isProcessingEnabled else {
-            print("🛑 Skipping API call - processing disabled")
-            throw CancellationError()
-        }
-        
-        // Check if swing detection is disabled
-        if Config.disableSwingDetection {
-            // Skip swing detection entirely
-            return false
-        }
-        
-        // Send frame via WebSocket if connected
         if swingDetectionWS.isConnected {
             try await swingDetectionWS.sendFrame(image)
-            // WebSocket will handle the response via callbacks
-            return false // Don't process here, let WebSocket callbacks handle it
+            return false
         } else {
             print("⚠️ WebSocket not connected for swing detection")
-            // Could attempt to reconnect here if needed
             return false
         }
     }
-    
     
     // MARK: - Error Handling
     
@@ -981,21 +473,14 @@ class RecordingViewModel: NSObject {
     // MARK: - Cleanup
     
     func cleanup() {
-        // Generate new session ID to invalidate any pending operations
         recordingSessionId = UUID()
-        
         stopAllTimers()
         stopVoiceRecognition()
         voiceCommandCancellable?.cancel()
-        captureSession?.stopRunning()
+        cameraService.stopSession()
         recordingAPIService.endSession()
         swingDetectionWS.endDetection()
         swingDetectionWS.disconnect()
-    }
-    
-    deinit {
-        // Note: Cannot call main actor isolated methods from deinit
-        // Cleanup will be handled by the view's onDisappear
     }
 }
 
@@ -1004,7 +489,6 @@ class RecordingViewModel: NSObject {
 extension RecordingViewModel: AVCaptureFileOutputRecordingDelegate {
     
     nonisolated func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
-        // Recording started successfully
         print("Video recording started to: \(fileURL)")
     }
     
@@ -1016,14 +500,10 @@ extension RecordingViewModel: AVCaptureFileOutputRecordingDelegate {
             Task { @MainActor in
                 self.recordedVideoURL = outputFileURL
                 
-                // Save analysis record and queue for processing
                 if let deps = self.dependencies {
                     self.recordedAnalysisId = deps.videoProcessing.queueVideo(videoURL: outputFileURL)
-                    
-                    // Update global state
                     deps.setCurrentRecording(url: outputFileURL, id: self.recordedAnalysisId!)
                     
-                    // Now that we have the video URL, transition to processing
                     if self.currentPhase != .processing {
                         self.currentPhase = .processing
                     }
@@ -1034,63 +514,6 @@ extension RecordingViewModel: AVCaptureFileOutputRecordingDelegate {
         }
     }
 }
-
-// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
-
-extension RecordingViewModel: AVCaptureVideoDataOutputSampleBufferDelegate {
-    
-    nonisolated func captureOutput(_ output: AVCaptureOutput,
-                                   didOutput sampleBuffer: CMSampleBuffer,
-                                   from connection: AVCaptureConnection) {
-        // Check if we should capture this frame
-        Task { @MainActor in
-            guard self.shouldCaptureNextFrame else { return }
-            
-            guard self.isProcessingEnabled else {
-                print("🎥 Frame capture blocked - processing disabled")
-                self.shouldCaptureNextFrame = false
-                return
-            }
-            
-            guard self.currentPhase == .recording else {
-                print("🎥 Frame capture blocked - not in recording phase (phase: \(self.currentPhase))")
-                self.shouldCaptureNextFrame = false
-                return
-            }
-                        
-            // Reset flag and update last capture time
-            self.shouldCaptureNextFrame = false
-            let currentTime = Date().timeIntervalSince1970
-            self.lastFrameCaptureTime = currentTime
-            
-            print("🎥 Capturing frame for swing analysis at time: \(currentTime)")
-            
-            // Extract image from sample buffer
-            guard let image = self.imageFromSampleBuffer(sampleBuffer) else {
-                print("Failed to extract image from sample buffer")
-                return
-            }
-            
-            // Process the captured frame
-            self.onStillCaptured?(image)
-            self.processStillImage(image)
-        }
-    }
-    
-    private func imageFromSampleBuffer(_ sampleBuffer: CMSampleBuffer) -> UIImage? {
-        guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return nil }
-        
-        let ciImage = CIImage(cvPixelBuffer: imageBuffer)
-        let context = CIContext()
-        
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
-        
-        return UIImage(cgImage: cgImage)
-    }
-}
-
-// MARK: - Voice Commands
-// Voice command handling is now managed by OnDeviceSTTService
 
 // MARK: - UIImage Extension
 
