@@ -124,7 +124,7 @@ struct Config {
     static let isDebugPanelEnabled = DebugConfig.debugOnly(true, default: false)
     
     /// Delete all swing entries at launch (for debugging/testing)
-    static let deleteAllSwingEntriesAtLaunch = DebugConfig.debugOnly(true, default: false)
+    static let deleteAllSwingEntriesAtLaunch = DebugConfig.debugOnly(false, default: false)
     
     // MARK: - Convenience Methods
     

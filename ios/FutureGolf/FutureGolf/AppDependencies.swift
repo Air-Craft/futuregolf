@@ -19,7 +19,7 @@ class AppDependencies: ObservableObject {
     
     init() {
         // Initialize services
-        self.connectivity = ConnectivityService()
+        self.connectivity = ConnectivityService.shared
         self.analysisStorage = AnalysisStorageManager()
         self.videoProcessing = VideoProcessingService(
             storageManager: analysisStorage,
