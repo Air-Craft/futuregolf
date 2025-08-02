@@ -82,6 +82,7 @@ class RecordingViewModel: NSObject {
     private var activeAnalysisTasks = Set<Task<Void, Never>>()  // Track active analysis tasks
     private var capturedFramesBuffer: [UIImage] = []  // Buffer for captured frames
     private var shouldCaptureNextFrame = false  // Flag to capture next video frame
+    private var recordingSessionId = UUID()  // Unique ID for each recording session
     
     // MARK: - Camera Properties
     var preferredFrameRate: Double { CameraConfiguration.preferredFrameRate }
@@ -184,11 +185,21 @@ class RecordingViewModel: NSObject {
     private func handleVoiceCommand(_ command: VoiceCommand) {
         switch command {
         case .startRecording:
-            guard currentPhase == .setup else { return }
+            guard currentPhase == .setup else { 
+                print("⚠️ Ignoring start command - not in setup phase (current: \(currentPhase))")
+                return 
+            }
+            guard !isRecording else {
+                print("⚠️ Ignoring start command - already recording")
+                return
+            }
             print("🎤 Voice command received: Start Recording")
             startRecording()
         case .stopRecording:
-            guard currentPhase == .recording else { return }
+            guard currentPhase == .recording else { 
+                print("⚠️ Ignoring stop command - not in recording phase (current: \(currentPhase))")
+                return 
+            }
             print("🎤 Voice command received: Stop Recording")
             finishRecording()
         }
@@ -610,7 +621,14 @@ class RecordingViewModel: NSObject {
     // MARK: - Recording Control Methods
     
     func startRecording() {
-        guard currentPhase == .setup else { return }
+        guard currentPhase == .setup else { 
+            print("⚠️ Ignoring startRecording call - not in setup phase (current: \(currentPhase))")
+            return 
+        }
+        
+        // Generate new session ID for this recording
+        recordingSessionId = UUID()
+        print("🎬 Starting new recording session: \(recordingSessionId)")
         
         // Log audio configuration for debugging
         print("🎧 Current audio route at recording start:")
@@ -660,6 +678,12 @@ class RecordingViewModel: NSObject {
         
         print("🏁 Finishing recording - stopping all processing")
         
+        // Stop all timers FIRST to prevent any more captures
+        stopAllTimers()
+        
+        // Clear any pending frame captures
+        shouldCaptureNextFrame = false
+        
         isRecording = false
         isProcessingEnabled = false  // Disable photo processing immediately
         showProgressCircles = false
@@ -671,9 +695,6 @@ class RecordingViewModel: NSObject {
         }
         activeAnalysisTasks.removeAll()
         
-        // Stop all timers first to prevent any more captures
-        stopAllTimers()
-        
         // Stop video data output to prevent any more frames
         if let dataOutput = videoDataOutput {
             dataOutput.setSampleBufferDelegate(nil, queue: nil)
@@ -682,19 +703,23 @@ class RecordingViewModel: NSObject {
         // Stop video recording
         stopVideoRecording()
         
-        // Stop voice recognition
+        // IMPORTANT: Stop voice recognition BEFORE playing any TTS to prevent feedback
         onDeviceSTT.stopListening()
         stopVoiceRecognition()
         
         // End swing detection
         if !Config.disableSwingDetection {
             swingDetectionWS.endDetection()
+            // Give WebSocket time to close cleanly
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.swingDetectionWS.disconnect()
+            }
         }
         
         // Set phase to processing only after video URL is available
         // This will be done in the delegate callback
         
-        // Play completion TTS
+        // Play completion TTS (STT is already stopped, so no feedback loop)
         ttsService.speakText("That's great. I'll get to work analyzing your swings.")
     }
     
@@ -721,15 +746,24 @@ class RecordingViewModel: NSObject {
     // MARK: - Timer Methods
     
     private func startStillCaptureTimer() {
+        let currentSessionId = recordingSessionId
         stillCaptureTimer = Timer.scheduledTimer(withTimeInterval: stillCaptureInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                // Double-check we're still in recording phase
-                guard self?.currentPhase == .recording,
-                      self?.isProcessingEnabled == true else {
-                    print("Skipping frame capture - not in recording phase or processing disabled")
+                guard let self = self else { return }
+                
+                // Check if this is still the active recording session
+                guard self.recordingSessionId == currentSessionId else {
+                    print("🛑 Ignoring timer from old session")
                     return
                 }
-                self?.captureStillForAnalysis()
+                
+                // Double-check we're still in recording phase
+                guard self.currentPhase == .recording,
+                      self.isProcessingEnabled == true else {
+                    print("🛑 Skipping frame capture - not in recording phase or processing disabled")
+                    return
+                }
+                self.captureStillForAnalysis()
             }
         }
     }
@@ -947,6 +981,9 @@ class RecordingViewModel: NSObject {
     // MARK: - Cleanup
     
     func cleanup() {
+        // Generate new session ID to invalidate any pending operations
+        recordingSessionId = UUID()
+        
         stopAllTimers()
         stopVoiceRecognition()
         voiceCommandCancellable?.cancel()
