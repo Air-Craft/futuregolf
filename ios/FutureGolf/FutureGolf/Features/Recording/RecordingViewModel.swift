@@ -84,12 +84,11 @@ class RecordingViewModel: NSObject {
     
     // MARK: - Services
     var ttsService: TTSService = TTSService.shared
-    private let apiClient = APIClient()
     private let recordingAPIService = RecordingAPIService.shared
-    private let onDeviceSTT = OnDeviceSTTService.shared
-    private let swingDetectionWS = SwingDetectionWebSocketService()
     private let cameraService = CameraService()
     private let recordingService = RecordingService()
+    private let swingDetector = SwingDetector()
+    private let voiceCommandService = VoiceCommandService()
     
     // MARK: - Camera Session
     var captureSession: AVCaptureSession? {
@@ -103,9 +102,6 @@ class RecordingViewModel: NSObject {
     // MARK: - Timers
     private var stillCaptureTimer: Timer?
     private var timeoutTimer: Timer?
-    
-    // MARK: - Voice Processing
-    private var voiceCommandCancellable: AnyCancellable?
     
     // MARK: - Callbacks
     var onRecordingStarted: (() -> Void)?
@@ -123,18 +119,13 @@ class RecordingViewModel: NSObject {
         setupProgressCircles()
         print("🐛 RecordingViewModel: Progress circles setup completed")
         
-        setupVoiceCommands()
-        print("🐛 RecordingViewModel: Voice commands setup completed")
+        setupServices()
+        print("🐛 RecordingViewModel: Services setup completed")
         
         let sessionId = recordingAPIService.startSession()
         print("🐛 RecordingViewModel: API session started with ID: \(sessionId)")
         
-        setupWebSocketCallbacks()
         setupAudioTones()
-        
-        cameraService.onFrameCaptured = { [weak self] image in
-            self?.handleCapturedFrame(image)
-        }
     }
     
     // MARK: - Setup Methods
@@ -147,12 +138,18 @@ class RecordingViewModel: NSObject {
         progressCircles = (0..<targetSwingCount).map { _ in ProgressCircle() }
     }
     
-    private func setupVoiceCommands() {
-        voiceCommandCancellable = onDeviceSTT.$lastCommand
-            .compactMap { $0 }
-            .sink { [weak self] command in
-                self?.handleVoiceCommand(command)
-            }
+    private func setupServices() {
+        cameraService.onFrameCaptured = { [weak self] image in
+            self?.handleCapturedFrame(image)
+        }
+        
+        swingDetector.onSwingDetected = { [weak self] confidence in
+            self?.processSwingDetection(isSwingDetected: true, confidence: confidence)
+        }
+        
+        voiceCommandService.onCommand = { [weak self] command in
+            self?.handleVoiceCommand(command)
+        }
     }
     
     private func handleVoiceCommand(_ command: VoiceCommand) {
@@ -165,18 +162,6 @@ class RecordingViewModel: NSObject {
             guard currentPhase == .recording else { return }
             print("🎤 Voice command received: Stop Recording")
             finishRecording()
-        }
-    }
-    
-    private func setupWebSocketCallbacks() {
-        swingDetectionWS.onSwingDetected = { [weak self] confidence in
-            Task { @MainActor in
-                self?.processSwingDetection(isSwingDetected: true, confidence: confidence)
-            }
-        }
-        
-        swingDetectionWS.onError = { error in
-            print("❌ WebSocket error: \(error)")
         }
     }
     
@@ -230,8 +215,7 @@ class RecordingViewModel: NSObject {
         }
         
         if !Config.disableSwingDetection {
-            swingDetectionWS.connect()
-            swingDetectionWS.beginDetection()
+            swingDetector.connect()
         }
         
         recordingService.startRecording { [weak self] url, error in
@@ -246,10 +230,9 @@ class RecordingViewModel: NSObject {
         startStillCaptureTimer()
         startTimeoutTimer()
         
-        onDeviceSTT.stopListening()
-        ttsService.speakText("Great. I'm now recording. Begin swinging when you're ready.") { [weak self] _ in
-            self?.onDeviceSTT.startListening()
-        }
+        Task { try? await voiceCommandService.startListening() }
+        
+        ttsService.speakText("Great. I'm now recording. Begin swinging when you're ready.")
         
         onRecordingStarted?()
     }
@@ -269,13 +252,10 @@ class RecordingViewModel: NSObject {
         activeAnalysisTasks.removeAll()
         
         recordingService.stopRecording()
-        onDeviceSTT.stopListening()
+        voiceCommandService.stopListening()
         
         if !Config.disableSwingDetection {
-            swingDetectionWS.endDetection()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                self?.swingDetectionWS.disconnect()
-            }
+            swingDetector.disconnect()
         }
         
         ttsService.speakText("That's great. I'll get to work analyzing your swings.")
@@ -326,16 +306,11 @@ class RecordingViewModel: NSObject {
     // MARK: - Voice Recognition Methods
     
     func startVoiceRecognition() async throws {
-        print("🐛 RecordingViewModel: Starting on-device voice recognition...")
-        let hasPermissions = await onDeviceSTT.requestPermissions()
-        if !hasPermissions {
-            throw RecordingError.audioPermissionDenied
-        }
-        onDeviceSTT.startListening()
+        try await voiceCommandService.startListening()
     }
     
     func stopVoiceRecognition() {
-        onDeviceSTT.stopListening()
+        voiceCommandService.stopListening()
     }
     
     // MARK: - Still Capture Methods
@@ -382,9 +357,9 @@ class RecordingViewModel: NSObject {
         playSwingTone()
         
         if swingCount == 1 {
-            onDeviceSTT.stopListening()
+            voiceCommandService.stopListening()
             ttsService.speakText("Great. Take another when you're ready.") { [weak self] _ in
-                self?.onDeviceSTT.startListening()
+                Task { try? await self?.voiceCommandService.startListening() }
             }
         } else if swingCount == 2 {
             ttsService.speakText("Ok one more to go.")
@@ -403,10 +378,7 @@ class RecordingViewModel: NSObject {
             guard let self = self, self.isProcessingEnabled else { return }
             
             do {
-                let isSwingDetected = try await self.analyzeStillForSwing(image)
-                if self.isProcessingEnabled {
-                    self.processSwingDetection(isSwingDetected: isSwingDetected, confidence: 0.0)
-                }
+                try await self.swingDetector.analyzeStillForSwing(image)
             } catch {
                 print("🚨 Error analyzing still image: \(error)")
             }
@@ -416,20 +388,6 @@ class RecordingViewModel: NSObject {
         Task { [weak self] in
             await task.value
             self?.activeAnalysisTasks.remove(task)
-        }
-    }
-    
-    private func analyzeStillForSwing(_ image: UIImage) async throws -> Bool {
-        try Task.checkCancellation()
-        guard isProcessingEnabled else { throw CancellationError() }
-        if Config.disableSwingDetection { return false }
-        
-        if swingDetectionWS.isConnected {
-            try await swingDetectionWS.sendFrame(image)
-            return false
-        } else {
-            print("⚠️ WebSocket not connected for swing detection")
-            return false
         }
     }
     
@@ -468,11 +426,9 @@ class RecordingViewModel: NSObject {
     func cleanup() {
         recordingSessionId = UUID()
         stopAllTimers()
-        stopVoiceRecognition()
-        voiceCommandCancellable?.cancel()
+        voiceCommandService.stopListening()
         cameraService.stopSession()
         recordingAPIService.endSession()
-        swingDetectionWS.endDetection()
-        swingDetectionWS.disconnect()
+        swingDetector.disconnect()
     }
 }
