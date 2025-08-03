@@ -76,7 +76,7 @@ struct RecordingScreen: View {
             
             if viewModel.showProgressCircles {
                 VStack {
-                    ProgressCirclesView(circles: viewModel.progressCircles)
+                    ProgressCirclesView(swingCount: viewModel.swingCount, targetSwingCount: viewModel.targetSwingCount)
                     Spacer()
                 }
             }

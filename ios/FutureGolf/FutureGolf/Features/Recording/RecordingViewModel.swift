@@ -13,7 +13,7 @@ class RecordingViewModel: NSObject, ObservableObject {
     weak var dependencies: AppDependencies?
     
     // MARK: - Services
-    let swingDetectionService: SwingDetectionService
+    private let swingDetectionWebSocketService = SwingDetectionWebSocketService()
     private let audioFeedbackService = AudioFeedbackService()
     
     var ttsService: TTSService = TTSService.shared
@@ -27,12 +27,9 @@ class RecordingViewModel: NSObject, ObservableObject {
     var isRecording = false
     var recordingTime: TimeInterval = 0
     var errorType: RecordingError?
+    var swingCount = 0
     
     private var recordingStartTime: Date?
-    
-    // MARK: - Published Properties from Services
-    var swingCount: Int { swingDetectionService.swingCount }
-    var progressCircles: [ProgressCircle] { swingDetectionService.progressCircles }
     
     // MARK: - Other Properties
     var isLeftHandedMode = false
@@ -56,7 +53,6 @@ class RecordingViewModel: NSObject, ObservableObject {
     
     init(dependencies: AppDependencies? = nil) {
         self.dependencies = dependencies
-        self.swingDetectionService = SwingDetectionService(targetSwingCount: Config.targetSwingCount)
         super.init()
         setupServices()
         recordingAPIService.startSession()
@@ -67,8 +63,10 @@ class RecordingViewModel: NSObject, ObservableObject {
             self?.currentFrameRate = frameRate
         }
         
-        swingDetectionService.onSwingDetected = { [weak self] swingCount in
-            self?.handleSwingDetected(swingCount)
+        swingDetectionWebSocketService.onSwingDetected = { [weak self] confidence in
+            guard let self = self else { return }
+            self.swingCount += 1
+            self.handleSwingDetected(self.swingCount)
         }
         
         voiceCommandService.onCommand = { [weak self] command in
@@ -114,14 +112,15 @@ class RecordingViewModel: NSObject, ObservableObject {
         
         showPositioningIndicator = false
         showProgressCircles = !Config.disableSwingDetection
-        swingDetectionService.reset()
+        reset()
         
         cameraService.onFrameCaptured = { [weak self] image in
             self?.handleCapturedFrame(image)
         }
         
         if !Config.disableSwingDetection {
-            swingDetectionService.connect()
+            swingDetectionWebSocketService.connect()
+            swingDetectionWebSocketService.beginDetection()
         }
         
         recordingService.startRecording { [weak self] url, error in
@@ -162,7 +161,10 @@ class RecordingViewModel: NSObject, ObservableObject {
         voiceCommandService.stopListening()
         
         if !Config.disableSwingDetection {
-            swingDetectionService.disconnect()
+            swingDetectionWebSocketService.endDetection()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.swingDetectionWebSocketService.disconnect()
+            }
         }
         
         ttsService.speakText("That's great. I'll get to work analyzing your swings.")
@@ -209,7 +211,11 @@ class RecordingViewModel: NSObject, ObservableObject {
         let task = Task { [weak self] in
             guard let self = self else { return }
             do {
-                try await self.swingDetectionService.analyzeStillForSwing(image)
+                if self.swingDetectionWebSocketService.isConnected {
+                    try await self.swingDetectionWebSocketService.sendFrame(image)
+                } else {
+                    print("⚠️ WebSocket not connected for swing detection")
+                }
             } catch {
                 print("🚨 Error analyzing still image: \(error)")
             }
@@ -251,7 +257,7 @@ class RecordingViewModel: NSObject, ObservableObject {
         cameraService.onFrameCaptured = nil
         cameraService.stopSession()
         recordingAPIService.endSession()
-        swingDetectionService.disconnect()
+        swingDetectionWebSocketService.disconnect()
     }
     
     func handle(error: Error) {
@@ -264,5 +270,9 @@ class RecordingViewModel: NSObject, ObservableObject {
     func resetState() {
         currentPhase = .setup
         errorType = nil
+    }
+
+    func reset() {
+        swingCount = 0
     }
 }
