@@ -89,6 +89,7 @@ struct RecordingScreen: View {
             deviceOrientation = UIDevice.current.orientation
         }
         .onChange(of: viewModel.currentPhase, handlePhaseChange)
+        .onChange(of: deps.currentRecordingId, handleCurrentRecordingIdChanged)
         .navigationDestination(isPresented: $shouldNavigateToAnalysis, destination: analysisDestination)
         .confirmationDialog("Cancel Recording", isPresented: $showCancelConfirmation, actions: cancelConfirmationActions, message: cancelConfirmationMessage)
         .alert("Recording Error", isPresented: .constant(viewModel.currentPhase == .error), actions: errorAlertActions, message: errorAlertMessage)
@@ -126,6 +127,12 @@ struct RecordingScreen: View {
     
     private func handlePhaseChange(oldValue: RecordingPhase, newValue: RecordingPhase) {
         if newValue == .processing && deps.currentRecordingId != nil {
+            shouldNavigateToAnalysis = true
+        }
+    }
+    
+    private func handleCurrentRecordingIdChanged(oldValue: String?, newValue: String?) {
+        if let id = newValue, viewModel.stateService.currentPhase == .processing {
             shouldNavigateToAnalysis = true
         }
     }

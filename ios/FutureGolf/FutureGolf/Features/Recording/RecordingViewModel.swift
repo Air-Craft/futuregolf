@@ -145,7 +145,7 @@ class RecordingViewModel: ObservableObject {
         recordingService.stopRecording()
         voiceCommandService.stopListening()
         
-        if !(Config.disableSwingDetection ?? false) {
+        if !Config.disableSwingDetection {
             swingDetectionService.disconnect()
         }
         
