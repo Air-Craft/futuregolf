@@ -3,13 +3,17 @@ import AVFoundation
 
 struct RecordingScreen: View {
     @EnvironmentObject var deps: AppDependencies
-    @State private var viewModel = RecordingViewModel()
+    @State private var viewModel: RecordingViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var showCancelConfirmation = false
     @State private var shouldNavigateToAnalysis = false
     @State private var deviceOrientation = UIDevice.current.orientation
     @State private var currentZoom: CGFloat = 1.0
     @State private var showZoomIndicator = false
+    
+    init() {
+        _viewModel = State(initialValue: RecordingViewModel())
+    }
     
     var body: some View {
         ZStack {
@@ -66,11 +70,8 @@ struct RecordingScreen: View {
         .preferredColorScheme(.dark)
         .onAppear(perform: setupScreen)
         .onDisappear(perform: viewModel.cleanup)
-                .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-            let newOrientation = UIDevice.current.orientation
-            if newOrientation != deviceOrientation {
-                deviceOrientation = newOrientation
-            }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            deviceOrientation = UIDevice.current.orientation
         }
         .onChange(of: viewModel.currentPhase, handlePhaseChange)
         .navigationDestination(isPresented: $shouldNavigateToAnalysis, destination: analysisDestination)
@@ -108,15 +109,6 @@ struct RecordingScreen: View {
             }
         }
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        deviceOrientation = UIDevice.current.orientation
-    }
-    
-    private func handleOrientationChange(_ notification: Notification) {
-        let newOrientation = UIDevice.current.orientation
-        if newOrientation != deviceOrientation {
-            deviceOrientation = newOrientation
-            
-        }
     }
     
     private func handlePhaseChange(oldValue: RecordingPhase, newValue: RecordingPhase) {
@@ -173,8 +165,7 @@ struct RecordingScreen: View {
             }
             Button("Retry") {
                 Task {
-                    viewModel.stateService.currentPhase = .setup
-                    viewModel.stateService.errorType = nil
+                    viewModel.resetState()
                     await setupScreen()
                 }
             }

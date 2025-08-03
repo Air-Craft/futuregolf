@@ -14,9 +14,9 @@ class RecordingViewModel: ObservableObject {
     
     // MARK: - Services
     let stateService = RecordingStateService()
-    private let swingDetectionService: SwingDetectionService
+    let swingDetectionService: SwingDetectionService
     private let audioFeedbackService = AudioFeedbackService()
-    private let stillImageCaptureService: StillImageCaptureService
+    let stillImageCaptureService: StillImageCaptureService
     
     var ttsService: TTSService = TTSService.shared
     private let recordingAPIService = RecordingAPIService.shared
@@ -49,7 +49,7 @@ class RecordingViewModel: ObservableObject {
     
     // MARK: - Configuration
     var targetSwingCount: Int { Config.targetSwingCount }
-    var stillCaptureInterval: TimeInterval = Config.stillCaptureInterval
+    var stillCaptureInterval: TimeInterval { Config.stillCaptureInterval }
     var recordingTimeout: TimeInterval { Config.recordingTimeout }
     
     init(dependencies: AppDependencies? = nil) {
@@ -177,8 +177,9 @@ class RecordingViewModel: ObservableObject {
     
     private func handleCapturedFrame(_ image: UIImage) {
         let task = Task { [weak self] in
+            guard let self = self else { return }
             do {
-                try await self?.swingDetectionService.analyzeStillForSwing(image)
+                try await self.swingDetectionService.analyzeStillForSwing(image)
             } catch {
                 print("🚨 Error analyzing still image: \(error)")
             }
@@ -221,5 +222,9 @@ class RecordingViewModel: ObservableObject {
         cameraService.stopSession()
         recordingAPIService.endSession()
         swingDetectionService.disconnect()
+    }
+    
+    func resetState() {
+        stateService.reset()
     }
 }
