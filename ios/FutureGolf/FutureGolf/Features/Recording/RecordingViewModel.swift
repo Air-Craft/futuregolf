@@ -7,13 +7,12 @@ import CoreImage
 
 @MainActor
 @Observable
-class RecordingViewModel: ObservableObject {
+class RecordingViewModel: NSObject, ObservableObject {
     
     // MARK: - Dependencies
     weak var dependencies: AppDependencies?
     
     // MARK: - Services
-    let stateService = RecordingStateService()
     let swingDetectionService: SwingDetectionService
     private let audioFeedbackService = AudioFeedbackService()
     
@@ -23,13 +22,17 @@ class RecordingViewModel: ObservableObject {
     private let recordingService = RecordingService()
     private let voiceCommandService = VoiceCommandService()
     
+    // MARK: - Published State
+    var currentPhase: RecordingPhase = .setup
+    var isRecording = false
+    var recordingTime: TimeInterval = 0
+    var errorType: RecordingError?
+    
+    private var recordingStartTime: Date?
+    
     // MARK: - Published Properties from Services
-    var currentPhase: RecordingPhase { stateService.currentPhase }
-    var isRecording: Bool { stateService.isRecording }
-    var recordingTime: TimeInterval { stateService.recordingTime }
     var swingCount: Int { swingDetectionService.swingCount }
     var progressCircles: [ProgressCircle] { swingDetectionService.progressCircles }
-    var errorType: RecordingError? { stateService.errorType }
     
     // MARK: - Other Properties
     var isLeftHandedMode = false
@@ -43,6 +46,7 @@ class RecordingViewModel: ObservableObject {
     
     var captureSession: AVCaptureSession? { cameraService.captureSession }
     
+    private var displayLink: CADisplayLink?
     private var timeoutTimer: Timer?
     private var activeAnalysisTasks = Set<Task<Void, Never>>()
     
@@ -53,6 +57,7 @@ class RecordingViewModel: ObservableObject {
     init(dependencies: AppDependencies? = nil) {
         self.dependencies = dependencies
         self.swingDetectionService = SwingDetectionService(targetSwingCount: Config.targetSwingCount)
+        super.init()
         setupServices()
         recordingAPIService.startSession()
     }
@@ -100,7 +105,13 @@ class RecordingViewModel: ObservableObject {
         guard currentPhase == .setup else { return }
         
         recordingSessionId = UUID()
-        stateService.startRecording()
+        
+        // Start recording state
+        currentPhase = .recording
+        isRecording = true
+        recordingStartTime = Date()
+        startDisplayLink()
+        
         showPositioningIndicator = false
         showProgressCircles = !Config.disableSwingDetection
         swingDetectionService.reset()
@@ -131,7 +142,12 @@ class RecordingViewModel: ObservableObject {
     func finishRecording() {
         guard currentPhase == .recording else { return }
         
-        stateService.stopRecording()
+        // Stop recording state
+        currentPhase = .processing
+        isRecording = false
+        recordingStartTime = nil
+        stopDisplayLink()
+        
         showProgressCircles = false
         
         timeoutTimer?.invalidate()
@@ -168,12 +184,27 @@ class RecordingViewModel: ObservableObject {
         }
     }
     
+    private func startDisplayLink() {
+        displayLink = CADisplayLink(target: self, selector: #selector(updateRecordingTime))
+        displayLink?.add(to: .main, forMode: .common)
+    }
+
+    private func stopDisplayLink() {
+        displayLink?.invalidate()
+        displayLink = nil
+    }
+    
+    @objc private func updateRecordingTime() {
+        guard let startTime = recordingStartTime else { return }
+        recordingTime = Date().timeIntervalSince(startTime)
+    }
+    
     func startVoiceRecognition() async throws {
         try await voiceCommandService.startListening()
     }
     
     private func handleCapturedFrame(_ image: UIImage) {
-        guard stateService.isRecording else { return }
+        guard isRecording else { return }
         
         let task = Task { [weak self] in
             guard let self = self else { return }
@@ -213,7 +244,7 @@ class RecordingViewModel: ObservableObject {
     
     func cleanup() {
         recordingSessionId = UUID()
-        stateService.cleanup()
+        stopDisplayLink()
         timeoutTimer?.invalidate()
         timeoutTimer = nil
         voiceCommandService.stopListening()
@@ -225,11 +256,13 @@ class RecordingViewModel: ObservableObject {
     
     func handle(error: Error) {
         if let recordingError = error as? RecordingError {
-            stateService.showError(recordingError)
+            errorType = recordingError
+            currentPhase = .error
         }
     }
     
     func resetState() {
-        stateService.reset()
+        currentPhase = .setup
+        errorType = nil
     }
 }

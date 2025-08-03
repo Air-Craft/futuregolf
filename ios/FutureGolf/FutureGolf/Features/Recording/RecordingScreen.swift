@@ -132,7 +132,7 @@ struct RecordingScreen: View {
     }
     
     private func handleCurrentRecordingIdChanged(oldValue: String?, newValue: String?) {
-        if let id = newValue, viewModel.stateService.currentPhase == .processing {
+        if let id = newValue, viewModel.currentPhase == .processing {
             shouldNavigateToAnalysis = true
         }
     }
