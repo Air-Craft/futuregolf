@@ -3,13 +3,14 @@ import AVFoundation
 import UIKit
 
 @MainActor
-class CameraService: NSObject {
+class CameraService: NSObject, AVCapturePhotoCaptureDelegate, AVCaptureVideoDataOutputSampleBufferDelegate {
     var captureSession: AVCaptureSession?
     var videoInput: AVCaptureDeviceInput?
     var videoDataOutput: AVCaptureVideoDataOutput?
     var currentCamera: AVCaptureDevice?
     var cameraPosition: AVCaptureDevice.Position = .front
     var onFrameCaptured: ((UIImage) -> Void)?
+    private let photoOutput = AVCapturePhotoOutput()
 
     private let videoDataOutputQueue = DispatchQueue(label: "com.futuregolf.cameravideodata")
 
@@ -45,6 +46,10 @@ class CameraService: NSObject {
         
         try setupCameraInput(for: position)
         setupVideoDataOutput()
+        
+        if session.canAddOutput(photoOutput) {
+            session.addOutput(photoOutput)
+        }
         
         session.commitConfiguration()
         
@@ -105,24 +110,38 @@ class CameraService: NSObject {
     
     func setZoomLevel(_ zoom: CGFloat) {
         guard let device = currentCamera else { return }
-        
         do {
             try device.lockForConfiguration()
-            let maxZoom = min(device.activeFormat.videoMaxZoomFactor, 4.0)
-            let scaledZoom = 1.0 + (1.0 - zoom) * (maxZoom - 1.0)
-            device.videoZoomFactor = scaledZoom
+            device.videoZoomFactor = zoom
             device.unlockForConfiguration()
         } catch {
             print("Error setting zoom level: \(error)")
         }
     }
+
+    func captureStillImage() {
+        let settings = AVCapturePhotoSettings()
+        photoOutput.capturePhoto(with: settings, delegate: self)
+    }
     
     func stopSession() {
         captureSession?.stopRunning()
     }
-}
-
-extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
+    
+    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        if let error = error {
+            print("Error capturing photo: \(error)")
+            return
+        }
+        
+        guard let imageData = photo.fileDataRepresentation(), let image = UIImage(data: imageData) else {
+            print("Could not get image data")
+            return
+        }
+        
+        onFrameCaptured?(image)
+    }
+    
     nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         

@@ -66,7 +66,12 @@ struct RecordingScreen: View {
         .preferredColorScheme(.dark)
         .onAppear(perform: setupScreen)
         .onDisappear(perform: viewModel.cleanup)
-        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification), perform: handleOrientationChange)
+                .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            let newOrientation = UIDevice.current.orientation
+            if newOrientation != deviceOrientation {
+                deviceOrientation = newOrientation
+            }
+        }
         .onChange(of: viewModel.currentPhase, handlePhaseChange)
         .navigationDestination(isPresented: $shouldNavigateToAnalysis, destination: analysisDestination)
         .confirmationDialog("Cancel Recording", isPresented: $showCancelConfirmation, actions: cancelConfirmationActions, message: cancelConfirmationMessage)
@@ -98,21 +103,19 @@ struct RecordingScreen: View {
                 }
             } catch {
                 if let recordingError = error as? RecordingError {
-                    viewModel.errorType = recordingError
-                    viewModel.currentPhase = .error
+                    viewModel.stateService.showError(recordingError)
                 }
             }
         }
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         deviceOrientation = UIDevice.current.orientation
-        viewModel.updateOrientation(deviceOrientation)
     }
     
     private func handleOrientationChange(_ notification: Notification) {
         let newOrientation = UIDevice.current.orientation
         if newOrientation != deviceOrientation {
             deviceOrientation = newOrientation
-            viewModel.updateOrientation(newOrientation)
+            
         }
     }
     
@@ -170,8 +173,8 @@ struct RecordingScreen: View {
             }
             Button("Retry") {
                 Task {
-                    viewModel.currentPhase = .setup
-                    viewModel.errorType = nil
+                    viewModel.stateService.currentPhase = .setup
+                    viewModel.stateService.errorType = nil
                     await setupScreen()
                 }
             }
