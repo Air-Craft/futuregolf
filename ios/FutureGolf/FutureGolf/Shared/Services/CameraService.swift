@@ -13,7 +13,6 @@ class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     var onFramerateUpdate: ((Double) -> Void)?
 
     private let sessionQueue = DispatchQueue(label: "com.futuregolf.sessionQueue")
-    private let frameRateCalculator = FrameRateCalculator()
 
     override init() {
         super.init()
@@ -70,17 +69,71 @@ class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         if let existingInput = videoInput {
             session.removeInput(existingInput)
         }
-        
-        let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position) ?? AVCaptureDevice.default(for: .video)
-        
-        guard let camera = camera else {
+
+        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position) ?? AVCaptureDevice.default(for: .video) else {
             throw RecordingError.cameraHardwareError
         }
-        
+
         self.currentCamera = camera
-        
+
+        do {
+            try camera.lockForConfiguration()
+
+//            if camera.isLowLightBoostSupported {
+//                print("📸 Disabled low light boost.")
+//            }
+
+            var bestFormat: AVCaptureDevice.Format?
+            let targetFrameRate = Config.preferredFrameRate
+
+            // Find the best format that supports 1080p at the desired frame rate
+            for format in camera.formats {
+                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                if dimensions.width == 1920 && dimensions.height == 1080 {
+                    for range in format.videoSupportedFrameRateRanges {
+                        if range.maxFrameRate >= targetFrameRate {
+                            bestFormat = format
+                            break
+                        }
+                    }
+                }
+                if bestFormat != nil {
+                    break
+                }
+            }
+
+            var actualFrameRate = Config.fallbackFrameRate
+            if let bestFormat = bestFormat {
+                camera.activeFormat = bestFormat
+                let frameDuration = CMTimeMake(value: 1, timescale: Int32(targetFrameRate))
+                camera.activeVideoMinFrameDuration = frameDuration
+                camera.activeVideoMaxFrameDuration = frameDuration
+                actualFrameRate = targetFrameRate
+                print("📸 Desired frame rate set to \(targetFrameRate) FPS for position \(position)")
+            } else {
+                print("⚠️ Could not find a 1920x1080 format supporting \(targetFrameRate) FPS for position \(position). Using default.")
+                // If we couldn't set our preferred rate, let's read what the default is.
+                if camera.activeVideoMinFrameDuration.seconds > 0 {
+                    actualFrameRate = round(1.0 / camera.activeVideoMinFrameDuration.seconds)
+                }
+            }
+
+            // Report the configured frame rate
+            Task { @MainActor in
+                self.onFramerateUpdate?(actualFrameRate)
+            }
+
+            camera.unlockForConfiguration()
+        } catch {
+            print("🚨 Could not lock camera for configuration: \(error)")
+            // Report fallback frame rate on error
+            Task { @MainActor in
+                self.onFramerateUpdate?(Config.fallbackFrameRate)
+            }
+        }
+
         let input = try AVCaptureDeviceInput(device: camera)
-        
+
         if session.canAddInput(input) {
             session.addInput(input)
             self.videoInput = input
@@ -138,12 +191,7 @@ class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     }
     
     nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        Task {
-            let frameRate = await frameRateCalculator.calculateFrameRate(from: sampleBuffer)
-            Task { @MainActor in
-                self.onFramerateUpdate?(frameRate)
-            }
-        }
+        // Frame rate is now set during configuration, no need to calculate it here.
         
         guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         
@@ -157,19 +205,5 @@ class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         Task { @MainActor in
             self.onFrameCaptured?(image)
         }
-    }
-}
-
-actor FrameRateCalculator {
-    private var lastFrameTimestamp = CMTime.zero
-    
-    func calculateFrameRate(from sampleBuffer: CMSampleBuffer) -> Double {
-        let currentTimestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        let delta = currentTimestamp - lastFrameTimestamp
-        lastFrameTimestamp = currentTimestamp
-        
-        guard delta.seconds > 0 else { return 0 }
-        
-        return 1.0 / delta.seconds
     }
 }

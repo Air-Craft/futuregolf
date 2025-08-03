@@ -60,10 +60,8 @@ struct Config {
     // MARK: - Recording Configuration
     
     /// Camera frame rate preferences
-    struct Camera {
-        static let preferredFrameRate: Double = 60.0
-        static let fallbackFrameRate: Double = 30.0
-    }
+    static let preferredFrameRate: Double = 60.0
+    static let fallbackFrameRate: Double = 30.0
     
     /// Recording timeout in seconds (3 minutes)
     static let recordingTimeout: TimeInterval = 180.0
