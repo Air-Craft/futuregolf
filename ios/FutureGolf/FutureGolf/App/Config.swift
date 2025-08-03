@@ -80,7 +80,7 @@ struct Config {
     static let imageConvertBW = true
     
     /// Disable swing detection (bypass server queries)
-    static let disableSwingDetection = false
+    static let disableSwingDetection = DebugConfig.value(false, release: false)
     
     // MARK: - Image Processing Configuration
     
@@ -124,7 +124,7 @@ struct Config {
     static let isDebugPanelEnabled = DebugConfig.debugOnly(true, default: false)
     
     /// Delete all swing entries at launch (for debugging/testing)
-    static let deleteAllSwingEntriesAtLaunch = DebugConfig.debugOnly(false, default: false)
+    static let deleteAllSwingEntriesAtLaunch = DebugConfig.debugOnly(true, default: false)
     
     // MARK: - Convenience Methods
     

@@ -56,6 +56,12 @@ class SwingDetectionWebSocketService: NSObject, ObservableObject {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private var detectionStartTime:TimeInterval = 0
+    
+    // Retry Logic
+    private var retryTimer: Timer?
+    private var retryAttempts = 0
+    private let maxRetryAttempts = 5
+    private var baseRetryInterval: TimeInterval = 1.0
 
     // Callbacks
     var onSwingDetected: ((Float) -> Void)?  // confidence
@@ -69,7 +75,7 @@ class SwingDetectionWebSocketService: NSObject, ObservableObject {
     // MARK: - Connection Management
     
     func connect() {
-        disconnect() // Ensure clean state
+        guard webSocketTask == nil else { return }
         
         let wsURL = Config.apiBaseURL
             .replacingOccurrences(of: "http://", with: "ws://")
@@ -86,18 +92,37 @@ class SwingDetectionWebSocketService: NSObject, ObservableObject {
         webSocketTask = urlSession.webSocketTask(with: url)
         webSocketTask?.resume()
         
-        // Start receiving messages
         receiveMessage()
         
-        // Don't set isConnected here - wait for delegate callback
         print("🔌 WebSocket connection initiated...")
     }
     
     func disconnect() {
+        retryTimer?.invalidate()
+        retryTimer = nil
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         isConnected = false
         print("🔌 WebSocket disconnected")
+    }
+    
+    private func retryConnection() {
+        guard retryAttempts < maxRetryAttempts else {
+            print("❌ WebSocket connection failed after \(maxRetryAttempts) attempts.")
+            onError?("Failed to connect to the server.")
+            return
+        }
+        
+        let delay = baseRetryInterval * pow(2.0, Double(retryAttempts))
+        retryAttempts += 1
+        
+        print("🔌 Retrying WebSocket connection in \(delay) seconds...")
+        
+        retryTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.connect()
+            }
+        }
     }
     
     // MARK: - Sending Frames
@@ -189,8 +214,7 @@ class SwingDetectionWebSocketService: NSObject, ObservableObject {
                     
                 case .failure(let error):
                     print("❌ WebSocket receive error: \(error)")
-                    self.isConnected = false
-                    self.onError?(error.localizedDescription)
+                    self.handleConnectionFailure(error: error)
                 }
             }
         }
@@ -201,39 +225,46 @@ class SwingDetectionWebSocketService: NSObject, ObservableObject {
             let response = try decoder.decode(SwingDetectionWSResponse.self, from: data)
             lastResponse = response
             
-            switch response.status {
-            case "evaluated":
-                if let swingDetected = response.swingDetected,
-                   let confidence = response.confidence,
-                   swingDetected,
-                   confidence >= Config.swingDetectConfidenceThreshold {
-                    print("🏌️ Swing detected with confidence: \(confidence)")
-                    onSwingDetected?(confidence)
-                } else {
-                }
-                
-            case "cooldown":
-                // Log cooldown but don't expose it to view model
-                if let cooldownRemaining = response.cooldownRemaining {
-                    print("⏱️ Cooldown: \(cooldownRemaining)s remaining")
-                }
-                
-            case "awaiting_more_data":
-                // Normal status while collecting frames
-                break
-                
-            case "error":
+            if response.status == "error" {
                 print("❌ Error: \(response.error ?? "Unknown error")")
                 onError?(response.error ?? "Unknown error")
-                
-            default:
-                print("⚠️ Unknown status: \(response.status)")
+                return
             }
+            
+            if let swingDetected = response.swingDetected,
+               let confidence = response.confidence,
+               swingDetected,
+               confidence >= Config.swingDetectConfidenceThreshold {
+                print("🏌️ Swing detected with confidence: \(confidence)")
+                onSwingDetected?(confidence)
+            }
+            
+            // Optional: Print every 5th cooldown message
+            if response.status == "cooldown",
+               let cooldownRemaining = response.cooldownRemaining {
+                struct CooldownTracker {
+                    static var counter = 0
+                }
+                CooldownTracker.counter += 1
+                if CooldownTracker.counter % 11 == 0 {
+                    print("⏱️ Cooldown: \(cooldownRemaining)s remaining")
+                }
+            }
+            
+            // Uncomment for debugging full response
+            // print("🧾 Full WS Response: \(response)")
             
         } catch {
             print("❌ Failed to decode message: \(error)")
             print("📦 Raw message data: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
         }
+    }
+    
+    private func handleConnectionFailure(error: Error) {
+        isConnected = false
+        webSocketTask = nil
+        onError?(error.localizedDescription)
+        retryConnection()
     }
 }
 
@@ -245,6 +276,9 @@ extension SwingDetectionWebSocketService: URLSessionWebSocketDelegate {
         Task { @MainActor in
             print("✅ WebSocket connection opened")
             self.isConnected = true
+            self.retryAttempts = 0
+            self.retryTimer?.invalidate()
+            self.retryTimer = nil
         }
     }
     
@@ -252,6 +286,9 @@ extension SwingDetectionWebSocketService: URLSessionWebSocketDelegate {
         Task { @MainActor in
             print("🔌 WebSocket connection closed: \(closeCode.rawValue)")
             self.isConnected = false
+            if closeCode != .goingAway {
+                self.retryConnection()
+            }
         }
     }
     
@@ -259,8 +296,7 @@ extension SwingDetectionWebSocketService: URLSessionWebSocketDelegate {
         if let error = error {
             Task { @MainActor in
                 print("❌ WebSocket connection error: \(error)")
-                self.isConnected = false
-                self.onError?(error.localizedDescription)
+                self.handleConnectionFailure(error: error)
             }
         }
     }

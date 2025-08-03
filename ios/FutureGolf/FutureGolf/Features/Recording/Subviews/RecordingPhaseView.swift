@@ -5,11 +5,6 @@ struct RecordingPhaseView: View {
     
     var body: some View {
         VStack(spacing: 24) {
-            if viewModel.showProgressCircles {
-                ProgressCirclesView(circles: viewModel.progressCircles)
-                    .transition(.scale.combined(with: .opacity))
-            }
-            
             Text("\(viewModel.swingCount) of \(viewModel.targetSwingCount) swings")
                 .font(.title2)
                 .fontWeight(.semibold)

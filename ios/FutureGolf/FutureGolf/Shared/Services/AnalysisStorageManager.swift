@@ -127,13 +127,22 @@ class AnalysisStorageManager: ObservableObject {
     
     /// Delete an analysis
     func deleteAnalysis(id: String) {
-        storedAnalyses.removeAll { $0.id == id }
-        persistAnalyses()
+        guard let index = storedAnalyses.firstIndex(where: { $0.id == id }) else { return }
         
-        // Also delete the video file if needed
-        if let analysis = getAnalysis(id: id) {
-            try? FileManager.default.removeItem(at: analysis.videoURL)
+        let analysisToDelete = storedAnalyses[index]
+        
+        // Attempt to delete the associated video file
+        do {
+            try FileManager.default.removeItem(at: analysisToDelete.videoURL)
+            print("🗑️ Deleted video file: \(analysisToDelete.videoURL.path)")
+        } catch {
+            // Log the error but continue, as the file might already be gone
+            print("⚠️ Could not delete video file \(analysisToDelete.videoURL.path): \(error.localizedDescription)")
         }
+        
+        // Now, remove the analysis record and persist the change
+        storedAnalyses.remove(at: index)
+        persistAnalyses()
     }
     
     /// Clean up old completed analyses (optional housekeeping)

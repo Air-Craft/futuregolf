@@ -15,6 +15,7 @@ class RecordingService: NSObject, AVCaptureFileOutputRecordingDelegate {
     func startRecording(completion: @escaping (URL?, Error?) -> Void) {
         self.onRecordingFinished = completion
         let outputURL = createOutputFileURL()
+        print("🎥 RecordingService: Starting recording to URL: \(outputURL.path)")
         videoOutput?.startRecording(to: outputURL, recordingDelegate: self)
     }
 
@@ -29,6 +30,17 @@ class RecordingService: NSObject, AVCaptureFileOutputRecordingDelegate {
     }
 
     func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        if let error = error {
+            print("🎥 RecordingService: Recording finished with error: \(error.localizedDescription)")
+        } else {
+            print("🎥 RecordingService: Recording finished successfully at URL: \(outputFileURL.path)")
+            // Verify the file exists
+            if FileManager.default.fileExists(atPath: outputFileURL.path) {
+                print("🎥 RecordingService: Verified file exists at path.")
+            } else {
+                print("🚨 RecordingService: ERROR - File does not exist at path after recording finished.")
+            }
+        }
         onRecordingFinished?(outputFileURL, error)
     }
 }

@@ -46,6 +46,15 @@ class VideoProcessingService: ObservableObject {
     
     /// Queue a video for processing
     func queueVideo(videoURL: URL) -> String {
+        print("📤 VideoProcessing: Queuing video at URL: \(videoURL.path)")
+        
+        // Verify file exists before queuing
+        if !FileManager.default.fileExists(atPath: videoURL.path) {
+            print("🚨 VideoProcessing: ERROR - Cannot queue video. File does not exist at path: \(videoURL.path)")
+            // Return a placeholder or handle the error appropriately
+            return "error-file-not-found"
+        }
+        
         let analysisId = storageManager.saveAnalysis(videoURL: videoURL, status: .pending)
         processingQueue.append(analysisId)
         

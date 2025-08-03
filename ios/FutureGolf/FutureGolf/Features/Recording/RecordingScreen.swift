@@ -17,18 +17,26 @@ struct RecordingScreen: View {
     
     var body: some View {
         ZStack {
-            CameraPreviewView(viewModel: viewModel)
-                .ignoresSafeArea(.all)
-                .accessibilityIdentifier("CameraPreview")
-                .gesture(
-                    MagnificationGesture()
-                        .onChanged(handleZoomGesture)
-                        .onEnded { _ in
-                            withAnimation(.easeOut(duration: 2)) {
-                                showZoomIndicator = false
+            if let session = viewModel.captureSession {
+                CameraPreviewView(session: session)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea(.all)
+                    .accessibilityIdentifier("CameraPreview")
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged(handleZoomGesture)
+                            .onEnded { _ in
+                                withAnimation(.easeOut(duration: 2)) {
+                                    showZoomIndicator = false
+                                }
                             }
-                        }
-                )
+                    )
+            } else {
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    ProgressView()
+                }
+            }
             
             VStack(spacing: 0) {
                 TopControlsView(viewModel: viewModel, onCancel: handleCancel)
@@ -63,6 +71,13 @@ struct RecordingScreen: View {
                     }
                     .padding(.trailing, 20)
                     .padding(.bottom, 100)
+                }
+            }
+            
+            if viewModel.showProgressCircles {
+                VStack {
+                    ProgressCirclesView(circles: viewModel.progressCircles)
+                    Spacer()
                 }
             }
         }
@@ -103,9 +118,7 @@ struct RecordingScreen: View {
                     Task { try? await viewModel.startVoiceRecognition() }
                 }
             } catch {
-                if let recordingError = error as? RecordingError {
-                    viewModel.stateService.showError(recordingError)
-                }
+                viewModel.handle(error: error)
             }
         }
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()

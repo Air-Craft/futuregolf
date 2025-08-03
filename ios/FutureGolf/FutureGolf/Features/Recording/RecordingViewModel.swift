@@ -16,7 +16,6 @@ class RecordingViewModel: ObservableObject {
     let stateService = RecordingStateService()
     let swingDetectionService: SwingDetectionService
     private let audioFeedbackService = AudioFeedbackService()
-    let stillImageCaptureService: StillImageCaptureService
     
     var ttsService: TTSService = TTSService.shared
     private let recordingAPIService = RecordingAPIService.shared
@@ -49,20 +48,18 @@ class RecordingViewModel: ObservableObject {
     
     // MARK: - Configuration
     var targetSwingCount: Int { Config.targetSwingCount }
-    var stillCaptureInterval: TimeInterval { Config.stillCaptureInterval }
     var recordingTimeout: TimeInterval { Config.recordingTimeout }
     
     init(dependencies: AppDependencies? = nil) {
         self.dependencies = dependencies
         self.swingDetectionService = SwingDetectionService(targetSwingCount: Config.targetSwingCount)
-        self.stillImageCaptureService = StillImageCaptureService(stillCaptureInterval: Config.stillCaptureInterval)
         setupServices()
         recordingAPIService.startSession()
     }
     
     private func setupServices() {
-        cameraService.onFrameCaptured = { [weak self] image in
-            self?.handleCapturedFrame(image)
+        cameraService.onFramerateUpdate = { [weak self] frameRate in
+            self?.currentFrameRate = frameRate
         }
         
         swingDetectionService.onSwingDetected = { [weak self] swingCount in
@@ -71,10 +68,6 @@ class RecordingViewModel: ObservableObject {
         
         voiceCommandService.onCommand = { [weak self] command in
             self?.handleVoiceCommand(command)
-        }
-        
-        stillImageCaptureService.onCapture = { [weak self] in
-            self?.captureStillForAnalysis()
         }
     }
     
@@ -112,6 +105,10 @@ class RecordingViewModel: ObservableObject {
         showProgressCircles = !Config.disableSwingDetection
         swingDetectionService.reset()
         
+        cameraService.onFrameCaptured = { [weak self] image in
+            self?.handleCapturedFrame(image)
+        }
+        
         if !Config.disableSwingDetection {
             swingDetectionService.connect()
         }
@@ -119,10 +116,12 @@ class RecordingViewModel: ObservableObject {
         recordingService.startRecording { [weak self] url, error in
             if let url = url {
                 self?.handleRecordingCompletion(url: url)
+            } else if let error = error {
+                print("🚨 RecordingViewModel: Received error from recording service: \(error.localizedDescription)")
+                self?.handle(error: RecordingError.cameraHardwareError)
             }
         }
         
-        stillImageCaptureService.start()
         startTimeoutTimer()
         
         Task { try? await voiceCommandService.startListening() }
@@ -138,7 +137,7 @@ class RecordingViewModel: ObservableObject {
         timeoutTimer?.invalidate()
         timeoutTimer = nil
         
-        stillImageCaptureService.stop()
+        cameraService.onFrameCaptured = nil
         
         activeAnalysisTasks.forEach { $0.cancel() }
         activeAnalysisTasks.removeAll()
@@ -146,7 +145,7 @@ class RecordingViewModel: ObservableObject {
         recordingService.stopRecording()
         voiceCommandService.stopListening()
         
-        if !Config.disableSwingDetection {
+        if !(Config.disableSwingDetection ?? false) {
             swingDetectionService.disconnect()
         }
         
@@ -154,9 +153,11 @@ class RecordingViewModel: ObservableObject {
     }
     
     private func handleRecordingCompletion(url: URL) {
+        print("📝 RecordingViewModel: Handling recording completion for URL: \(url.path)")
         self.recordedVideoURL = url
         if let deps = dependencies {
             self.recordedAnalysisId = deps.videoProcessing.queueVideo(videoURL: url)
+            print("📝 RecordingViewModel: Queued video with Analysis ID: \(self.recordedAnalysisId ?? "nil")")
             deps.setCurrentRecording(url: url, id: self.recordedAnalysisId!)
         }
     }
@@ -171,11 +172,9 @@ class RecordingViewModel: ObservableObject {
         try await voiceCommandService.startListening()
     }
     
-    private func captureStillForAnalysis() {
-        cameraService.captureStillImage()
-    }
-    
     private func handleCapturedFrame(_ image: UIImage) {
+        guard stateService.isRecording else { return }
+        
         let task = Task { [weak self] in
             guard let self = self else { return }
             do {
@@ -217,11 +216,17 @@ class RecordingViewModel: ObservableObject {
         stateService.cleanup()
         timeoutTimer?.invalidate()
         timeoutTimer = nil
-        stillImageCaptureService.stop()
         voiceCommandService.stopListening()
+        cameraService.onFrameCaptured = nil
         cameraService.stopSession()
         recordingAPIService.endSession()
         swingDetectionService.disconnect()
+    }
+    
+    func handle(error: Error) {
+        if let recordingError = error as? RecordingError {
+            stateService.showError(recordingError)
+        }
     }
     
     func resetState() {

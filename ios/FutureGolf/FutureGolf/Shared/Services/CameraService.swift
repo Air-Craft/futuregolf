@@ -3,28 +3,26 @@ import AVFoundation
 import UIKit
 
 @MainActor
-class CameraService: NSObject, AVCapturePhotoCaptureDelegate, AVCaptureVideoDataOutputSampleBufferDelegate {
+class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     var captureSession: AVCaptureSession?
     var videoInput: AVCaptureDeviceInput?
     var videoDataOutput: AVCaptureVideoDataOutput?
     var currentCamera: AVCaptureDevice?
     var cameraPosition: AVCaptureDevice.Position = .front
     var onFrameCaptured: ((UIImage) -> Void)?
-    private let photoOutput = AVCapturePhotoOutput()
+    var onFramerateUpdate: ((Double) -> Void)?
 
-    private let videoDataOutputQueue = DispatchQueue(label: "com.futuregolf.cameravideodata")
+    private let sessionQueue = DispatchQueue(label: "com.futuregolf.sessionQueue")
+    private let frameRateCalculator = FrameRateCalculator()
 
     override init() {
         super.init()
     }
 
     func setupCamera(for position: AVCaptureDevice.Position) async throws {
+        print("📸 CameraService: Setting up camera for position \(position).")
         self.cameraPosition = position
-        captureSession = AVCaptureSession()
-        
-        guard let session = captureSession else {
-            throw RecordingError.cameraHardwareError
-        }
+        let session = AVCaptureSession()
         
         let cameraAuthStatus = AVCaptureDevice.authorizationStatus(for: .video)
         if cameraAuthStatus != .authorized {
@@ -44,23 +42,31 @@ class CameraService: NSObject, AVCapturePhotoCaptureDelegate, AVCaptureVideoData
             session.sessionPreset = .hd1920x1080
         }
         
-        try setupCameraInput(for: position)
-        setupVideoDataOutput()
-        
-        if session.canAddOutput(photoOutput) {
-            session.addOutput(photoOutput)
-        }
+        try setupCameraInput(for: position, in: session)
+        setupVideoDataOutput(for: session)
         
         session.commitConfiguration()
         
-        DispatchQueue.global(qos: .userInitiated).async {
-            session.startRunning()
+        self.captureSession = session
+        print("📸 CameraService: Capture session configured.")
+        
+        try await startSession()
+    }
+    
+    private func startSession() async throws {
+        guard let session = captureSession else { throw RecordingError.cameraHardwareError }
+        
+        print("📸 CameraService: Attempting to start session...")
+        await withCheckedContinuation { continuation in
+            sessionQueue.async {
+                session.startRunning()
+                print("📸 CameraService: Session isRunning: \(session.isRunning)")
+                continuation.resume()
+            }
         }
     }
 
-    func setupCameraInput(for position: AVCaptureDevice.Position) throws {
-        guard let session = captureSession else { return }
-        
+    func setupCameraInput(for position: AVCaptureDevice.Position, in session: AVCaptureSession) throws {
         if let existingInput = videoInput {
             session.removeInput(existingInput)
         }
@@ -83,15 +89,13 @@ class CameraService: NSObject, AVCapturePhotoCaptureDelegate, AVCaptureVideoData
         }
     }
 
-    private func setupVideoDataOutput() {
-        guard let session = captureSession else { return }
-        
+    private func setupVideoDataOutput(for session: AVCaptureSession) {
         videoDataOutput = AVCaptureVideoDataOutput()
         
         if let output = videoDataOutput {
             output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)]
             output.alwaysDiscardsLateVideoFrames = true
-            output.setSampleBufferDelegate(self, queue: videoDataOutputQueue)
+            output.setSampleBufferDelegate(self, queue: sessionQueue)
             
             if session.canAddOutput(output) {
                 session.addOutput(output)
@@ -100,11 +104,19 @@ class CameraService: NSObject, AVCapturePhotoCaptureDelegate, AVCaptureVideoData
     }
 
     func switchCamera() {
+        guard let session = captureSession else { return }
+        
         let newPosition: AVCaptureDevice.Position = (cameraPosition == .back) ? .front : .back
         cameraPosition = newPosition
         
-        Task {
-            try? setupCameraInput(for: newPosition)
+        sessionQueue.async {
+            session.beginConfiguration()
+            do {
+                try self.setupCameraInput(for: newPosition, in: session)
+            } catch {
+                print("Error switching camera: \(error)")
+            }
+            session.commitConfiguration()
         }
     }
     
@@ -118,31 +130,21 @@ class CameraService: NSObject, AVCapturePhotoCaptureDelegate, AVCaptureVideoData
             print("Error setting zoom level: \(error)")
         }
     }
-
-    func captureStillImage() {
-        let settings = AVCapturePhotoSettings()
-        photoOutput.capturePhoto(with: settings, delegate: self)
-    }
     
     func stopSession() {
-        captureSession?.stopRunning()
-    }
-    
-    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        if let error = error {
-            print("Error capturing photo: \(error)")
-            return
+        sessionQueue.async {
+            self.captureSession?.stopRunning()
         }
-        
-        guard let imageData = photo.fileDataRepresentation(), let image = UIImage(data: imageData) else {
-            print("Could not get image data")
-            return
-        }
-        
-        onFrameCaptured?(image)
     }
     
     nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        Task {
+            let frameRate = await frameRateCalculator.calculateFrameRate(from: sampleBuffer)
+            Task { @MainActor in
+                self.onFramerateUpdate?(frameRate)
+            }
+        }
+        
         guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         
         let ciImage = CIImage(cvPixelBuffer: imageBuffer)
@@ -155,5 +157,19 @@ class CameraService: NSObject, AVCapturePhotoCaptureDelegate, AVCaptureVideoData
         Task { @MainActor in
             self.onFrameCaptured?(image)
         }
+    }
+}
+
+actor FrameRateCalculator {
+    private var lastFrameTimestamp = CMTime.zero
+    
+    func calculateFrameRate(from sampleBuffer: CMSampleBuffer) -> Double {
+        let currentTimestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let delta = currentTimestamp - lastFrameTimestamp
+        lastFrameTimestamp = currentTimestamp
+        
+        guard delta.seconds > 0 else { return 0 }
+        
+        return 1.0 / delta.seconds
     }
 }
