@@ -11,6 +11,7 @@ class RecordingViewModel: NSObject, ObservableObject {
     
     // MARK: - Dependencies
     weak var dependencies: AppDependencies?
+    weak var appState: AppState?
     
     // MARK: - Services
     private let swingDetectionWebSocketService = SwingDetectionWebSocketService()
@@ -51,8 +52,9 @@ class RecordingViewModel: NSObject, ObservableObject {
     var targetSwingCount: Int { Config.targetSwingCount }
     var recordingTimeout: TimeInterval { Config.recordingTimeout }
     
-    init(dependencies: AppDependencies? = nil) {
+    init(dependencies: AppDependencies? = nil, appState: AppState? = nil) {
         self.dependencies = dependencies
+        self.appState = appState
         super.init()
         setupServices()
         recordingAPIService.startSession()
@@ -177,6 +179,15 @@ class RecordingViewModel: NSObject, ObservableObject {
             self.recordedAnalysisId = deps.videoProcessing.queueVideo(videoURL: url)
             print("📝 RecordingViewModel: Queued video with Analysis ID: \(self.recordedAnalysisId ?? "nil")")
             deps.setCurrentRecording(url: url, id: self.recordedAnalysisId!)
+            
+            // Update AppState with new recording
+            if let appState = appState, let analysisId = self.recordedAnalysisId {
+                let placeholderAnalysis = appState.createPlaceholderAnalysis(for: analysisId)
+                appState.addAnalysis(placeholderAnalysis)
+                appState.activeAnalysisId = analysisId
+                appState.currentRecordingId = analysisId
+                appState.currentRecordingURL = url
+            }
         }
     }
     

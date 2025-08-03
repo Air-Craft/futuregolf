@@ -38,19 +38,38 @@ class SwingAnalysisViewModel: ObservableObject {
     private var reportGenerator: AnalysisReportGenerator
     private var connectivityService: ConnectivityService?
     private var storageManager: AnalysisStorageManager?
+    private var appState: AppState?
 
     // Private state
     private var cancellables = Set<AnyCancellable>()
     private var analysisId: String?
     var videoURL: URL?
 
-    init(dependencies: AppDependencies?) {
+    init(dependencies: AppDependencies?, appState: AppState? = nil) {
         self.analysisService = AnalysisService(dependencies: dependencies)
         self.thumbnailService = ThumbnailService(dependencies: dependencies)
         self.ttsCacheService = TTSCacheService()
         self.reportGenerator = AnalysisReportGenerator()
         self.connectivityService = dependencies?.connectivity
         self.storageManager = dependencies?.analysisStorage
+        self.appState = appState
+        
+        setupBindings()
+    }
+    
+    init(videoURL: URL, analysisId: String, analysisStorage: AnalysisStorageManager, videoProcessingService: VideoProcessingService, appState: AppState?) {
+        self.videoURL = videoURL
+        self.analysisId = analysisId
+        self.storageManager = analysisStorage
+        self.appState = appState
+        
+        // Initialize services with basic dependencies
+        let deps = AppDependencies()
+        self.analysisService = AnalysisService(dependencies: deps)
+        self.thumbnailService = ThumbnailService(dependencies: deps)
+        self.ttsCacheService = TTSCacheService()
+        self.reportGenerator = AnalysisReportGenerator()
+        self.connectivityService = deps.connectivity
         
         setupBindings()
     }
@@ -162,6 +181,15 @@ class SwingAnalysisViewModel: ObservableObject {
 
     private func handleCompletedAnalysis(result: AnalysisResult) {
         self.analysisResult = result
+        
+        // Update AppState with the analysis
+        if let appState = appState {
+            appState.updateAnalysis(result)
+            if appState.activeAnalysisId == result.id {
+                appState.activeAnalysisId = result.id // Trigger update
+            }
+        }
+        
         updateDisplayData(from: result)
         generateKeyMoments(from: result)
         ttsCacheService.startMonitoring(for: result)

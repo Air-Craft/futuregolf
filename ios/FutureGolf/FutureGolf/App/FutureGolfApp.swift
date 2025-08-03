@@ -40,7 +40,7 @@ struct FutureGolfApp: App {
                 .environmentObject(deps.connectivity)
             } else if debugLaunchRecording {
                 // Launch directly into recording screen for testing
-                NavigationView {
+                NavigationStack {
                     DebugRecordingLauncher()
                 }
                 .withToastOverlay()
@@ -49,13 +49,8 @@ struct FutureGolfApp: App {
                 .environmentObject(deps.videoProcessing)
                 .environmentObject(deps.connectivity)
             } else {
-                // Normal app flow
-                HomeView()
-                    .withToastOverlay()
-                    .environmentObject(deps)
-                    .environmentObject(deps.analysisStorage)
-                    .environmentObject(deps.videoProcessing)
-                    .environmentObject(deps.connectivity)
+                // Normal app flow - Use the new navigation system
+                MainNavigationView()
                     .onAppear {
                         // Perform debug operations if configured
                         Task {

@@ -3,12 +3,11 @@ import AVKit
 
 struct HomeView: View {
     @EnvironmentObject var deps: AppDependencies
+    @EnvironmentObject var appState: AppState
     @State private var showUploadFlow = false
     @State private var showAnalysisView = false
     @State private var showDemoVideo = false
     @State private var showCoachingVideo = false
-    @State private var showRecordingScreen = false
-    @State private var showPreviousAnalyses = false
     @State private var showDebugPanel = false
     @State private var viewModel = VideoAnalysisViewModel()
     @State private var player: AVPlayer?
@@ -121,29 +120,6 @@ struct HomeView: View {
                         }
                 }
             }
-            .fullScreenCover(isPresented: $showRecordingScreen) {
-                NavigationStack {
-                    RecordingScreen()
-                        .environmentObject(deps)
-                        .environmentObject(deps.analysisStorage)
-                        .environmentObject(deps.videoProcessing)
-                        .environmentObject(deps.connectivity)
-                }
-            }
-            .sheet(isPresented: $showPreviousAnalyses) {
-                NavigationStack {
-                    PreviousAnalysesView()
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button("Done") {
-                                    showPreviousAnalyses = false
-                                }
-                            }
-                        }
-                        .environmentObject(deps.analysisStorage)
-                }
-            }
             .sheet(isPresented: $showDebugPanel) {
                 DebugPanelView()
             }
@@ -193,7 +169,7 @@ struct HomeView: View {
         VStack(spacing: 16) {
             // Button 1: Analyze My Swing (Camera)
             Button(action: {
-                showRecordingScreen = true
+                appState.navigate(to: .recording)
                 LiquidGlassHaptics.impact(.medium)
             }) {
                 HStack {
@@ -232,7 +208,7 @@ struct HomeView: View {
             // Button 3: Previous Swing Analyses (using Button instead of NavigationLink to avoid styling issues)
             Button(action: {
                 // Navigate programmatically instead of using NavigationLink
-                showPreviousAnalyses = true
+                appState.navigate(to: .previousAnalyses)
                 LiquidGlassHaptics.impact(.medium)
             }) {
                 HStack {

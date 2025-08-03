@@ -3,6 +3,7 @@ import AVFoundation
 
 struct RecordingScreen: View {
     @EnvironmentObject var deps: AppDependencies
+    @EnvironmentObject var appState: AppState
     @State private var viewModel: RecordingViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var showCancelConfirmation = false
@@ -90,7 +91,6 @@ struct RecordingScreen: View {
         }
         .onChange(of: viewModel.currentPhase, handlePhaseChange)
         .onChange(of: deps.currentRecordingId, handleCurrentRecordingIdChanged)
-        .navigationDestination(isPresented: $shouldNavigateToAnalysis, destination: analysisDestination)
         .confirmationDialog("Cancel Recording", isPresented: $showCancelConfirmation, actions: cancelConfirmationActions, message: cancelConfirmationMessage)
         .alert("Recording Error", isPresented: .constant(viewModel.currentPhase == .error), actions: errorAlertActions, message: errorAlertMessage)
         .accessibilityIdentifier("RecordingScreen")
@@ -112,6 +112,7 @@ struct RecordingScreen: View {
     
     private func setupScreen() {
         viewModel.dependencies = deps
+        viewModel.appState = appState
         Task {
             do {
                 try await viewModel.setupCamera()
@@ -127,13 +128,13 @@ struct RecordingScreen: View {
     
     private func handlePhaseChange(oldValue: RecordingPhase, newValue: RecordingPhase) {
         if newValue == .processing && deps.currentRecordingId != nil {
-            shouldNavigateToAnalysis = true
+            // The navigation is now handled by RecordingNavigationWrapper watching appState.currentRecordingId
         }
     }
     
     private func handleCurrentRecordingIdChanged(oldValue: String?, newValue: String?) {
         if let id = newValue, viewModel.currentPhase == .processing {
-            shouldNavigateToAnalysis = true
+            // The navigation is now handled by RecordingNavigationWrapper watching appState.currentRecordingId
         }
     }
     
@@ -157,10 +158,6 @@ struct RecordingScreen: View {
                 }
             }
         }
-    }
-    
-    private func analysisDestination() -> some View {
-        SwingAnalysisView(dependencies: deps).environmentObject(deps)
     }
     
     @ViewBuilder
