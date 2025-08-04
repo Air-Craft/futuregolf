@@ -35,8 +35,6 @@ from api.video_analysis import router as video_analysis_router
 from api.tts import router as tts_router
 from api.recording_voice import router as recording_voice_router
 from api.swing_detection_ws import router as swing_detection_ws_router
-from api.debug_info import router as debug_router
-from api.system import router as system_router
 from api.health_check import router as health_check_router
 from config.api import API_TITLE, API_DESCRIPTION, API_VERSION
 
@@ -68,8 +66,6 @@ app.include_router(video_analysis_router)
 app.include_router(tts_router)
 app.include_router(recording_voice_router)
 app.include_router(swing_detection_ws_router)
-app.include_router(debug_router)
-app.include_router(system_router)
 app.include_router(health_check_router)
 
 @app.get("/")
