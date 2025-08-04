@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import AVFoundation
 import Combine
+import Factory
 
 @MainActor
 class ThumbnailService: ObservableObject {
@@ -10,11 +11,9 @@ class ThumbnailService: ObservableObject {
     @Published var loadingProgress: Double = 0.0
     @Published var errorMessage: String?
 
-    private var storageManager: AnalysisStorageManager?
+    @Injected(\.analysisStorageManager) private var storageManager
 
-    init(dependencies: AppDependencies?) {
-        self.storageManager = dependencies?.analysisStorage
-    }
+    init() {}
 
     func generateThumbnail(for analysisId: String, from videoURL: URL) async {
         print("🎬 THUMBNAIL: Starting generation for: \(videoURL.lastPathComponent)")
@@ -43,7 +42,7 @@ class ThumbnailService: ObservableObject {
                 self.errorMessage = nil
                 print("🎬 THUMBNAIL: ✅ Success on attempt \(attempt)")
                 
-                storageManager?.updateThumbnail(id: analysisId, thumbnail: generatedThumbnail)
+                storageManager.updateThumbnail(id: analysisId, thumbnail: generatedThumbnail)
                 return
             }
             

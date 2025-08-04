@@ -1,5 +1,6 @@
 import Foundation
 import os.log
+import Factory
 
 /// Service responsible for debug operations like clearing data
 @MainActor
@@ -91,15 +92,15 @@ class DebugService {
     }
     
     /// Perform all debug launch operations if configured
-    func performDebugLaunchOperations(deps: AppDependencies) async {
+    func performDebugLaunchOperations() async {
         guard Config.isDebugEnabled else { return }
         
         // Delete all swing entries if configured
         if Config.deleteAllSwingEntriesAtLaunch {
             logger.warning("⚠️ DELETE_SWING_DATA_AT_LAUNCH is enabled - deleting all swing data!")
             await deleteAllSwingEntries(
-                analysisStorage: deps.analysisStorage,
-                videoProcessing: deps.videoProcessing
+                analysisStorage: Container.shared.analysisStorageManager(),
+                videoProcessing: Container.shared.videoProcessingService()
             )
         }
     }

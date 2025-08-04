@@ -4,24 +4,24 @@ import AVFoundation
 import Combine
 import Speech
 import CoreImage
+import Factory
 
 @MainActor
 @Observable
 class RecordingViewModel: NSObject, ObservableObject {
     
     // MARK: - Dependencies
-    weak var dependencies: AppDependencies?
-    weak var appState: AppState?
-    
+    @ObservationIgnored @Injected(\.appState) private var appState
+    @ObservationIgnored @Injected(\.videoProcessingService) private var videoProcessingService
+    @ObservationIgnored @Injected(\.ttsService) var ttsService
+    @ObservationIgnored @Injected(\.cameraService) private var cameraService
+    @ObservationIgnored @Injected(\.recordingService) private var recordingService
+    @ObservationIgnored @Injected(\.voiceCommandService) private var voiceCommandService
+    @ObservationIgnored @Injected(\.recordingAPIService) private var recordingAPIService
+
     // MARK: - Services
     private let swingDetectionWebSocketService = SwingDetectionWebSocketService()
     private let audioFeedbackService = AudioFeedbackService()
-    
-    var ttsService: TTSService = TTSService.shared
-    private let recordingAPIService = RecordingAPIService.shared
-    private let cameraService = CameraService()
-    private let recordingService = RecordingService()
-    private let voiceCommandService = VoiceCommandService()
     
     // MARK: - Published State
     var currentPhase: RecordingPhase = .setup
@@ -52,12 +52,12 @@ class RecordingViewModel: NSObject, ObservableObject {
     var targetSwingCount: Int { Config.targetSwingCount }
     var recordingTimeout: TimeInterval { Config.recordingTimeout }
     
-    init(dependencies: AppDependencies? = nil, appState: AppState? = nil) {
-        self.dependencies = dependencies
-        self.appState = appState
+    override init() {
         super.init()
-        setupServices()
-        recordingAPIService.startSession()
+        Task { @MainActor in
+            setupServices()
+            recordingAPIService.startSession()
+        }
     }
     
     private func setupServices() {
@@ -175,25 +175,16 @@ class RecordingViewModel: NSObject, ObservableObject {
     private func handleRecordingCompletion(url: URL) {
         print("📝 RecordingViewModel: Handling recording completion for URL: \(url.path)")
         self.recordedVideoURL = url
-        if let deps = dependencies {
-            self.recordedAnalysisId = deps.videoProcessing.queueVideo(videoURL: url)
-            print("📝 RecordingViewModel: Queued video with Analysis ID: \(self.recordedAnalysisId ?? "nil")")
-            deps.setCurrentRecording(url: url, id: self.recordedAnalysisId!)
-            
-            // Update AppState with new recording
-            if let appState = appState, let analysisId = self.recordedAnalysisId {
-                let placeholderAnalysis = appState.createPlaceholderAnalysis(for: analysisId)
-                appState.addAnalysis(placeholderAnalysis)
-                appState.activeAnalysisId = analysisId
-                appState.currentRecordingId = analysisId
-                appState.currentRecordingURL = url
-            }
-        }
+        self.recordedAnalysisId = videoProcessingService.queueVideo(videoURL: url)
+        print("📝 RecordingViewModel: Queued video with Analysis ID: \(self.recordedAnalysisId ?? "nil")")
+        appState.setCurrentRecording(url: url, id: self.recordedAnalysisId!)
     }
     
     private func startTimeoutTimer() {
         timeoutTimer = Timer.scheduledTimer(withTimeInterval: recordingTimeout, repeats: false) { [weak self] _ in
-            self?.handleRecordingTimeout()
+            Task { @MainActor in
+                self?.handleRecordingTimeout()
+            }
         }
     }
     

@@ -9,10 +9,13 @@ import SwiftUI
 import os.log
 import AVFoundation
 
+import SwiftUI
+import os.log
+import AVFoundation
+import Factory
+
 @main
 struct FutureGolfApp: App {
-    @StateObject private var deps = AppDependencies()
-    
     // Debug flag for direct recording screen launch
     private let debugLaunchRecording = ProcessInfo.processInfo.environment["DEBUG_LAUNCH_RECORDING"] == "1"
     
@@ -23,23 +26,30 @@ struct FutureGolfApp: App {
     
     var body: some Scene {
         WindowGroup {
-            if debugLaunchRecording {
+            if TestConfiguration.shared.shouldShowSwingAnalysisDirectly {
+                // For UI testing - go directly to SwingAnalysisView
+                SwingAnalysisView(
+                    videoURL: getTestVideoURL(),
+                    analysisId: "test-analysis-001"
+                )
+                .withToastOverlay()
+                .onAppear {
+                    setupTestEnvironment()
+                }
+            } else if debugLaunchRecording {
                 // Launch directly into recording screen for testing
                 NavigationStack {
                     DebugRecordingLauncher()
                 }
                 .withToastOverlay()
-                .environmentObject(deps)
-                .environmentObject(deps.analysisStorage)
-                .environmentObject(deps.videoProcessing)
-                .environmentObject(deps.connectivity)
             } else {
-                // Normal app flow - Use the new navigation system
-                MainNavigationView()
+                // Normal app flow
+                HomeView()
+                    .withToastOverlay()
                     .onAppear {
                         // Perform debug operations if configured
                         Task {
-                            await DebugService.shared.performDebugLaunchOperations(deps: deps)
+                            await DebugService.shared.performDebugLaunchOperations()
                         }
                         
                         // Perform app initialization tasks
@@ -115,7 +125,8 @@ struct FutureGolfApp: App {
         print("🚀 APP LAUNCH: Starting TTS cache warming...")
         
         // Check connectivity status
-        let isConnected = deps.connectivity.isConnected
+        let connectivityService = Container.shared.connectivityService()
+        let isConnected = connectivityService.isConnected
         print("🚀 APP LAUNCH: Network connected: \(isConnected)")
         
         // Show connectivity status on launch if not connected
@@ -151,16 +162,15 @@ struct FutureGolfApp: App {
     private func processPendingAnalyses() {
         print("🚀 APP LAUNCH: Checking for pending video analyses...")
         
-        let processingService = deps.videoProcessing
-        let storageManager = deps.analysisStorage
+        let processingService = Container.shared.videoProcessingService()
         
         // Get pending analyses
-        let pendingAnalyses = storageManager.getPendingAnalyses()
+        let pendingAnalyses = Container.shared.analysisStorageManager().getPendingAnalyses()
         print("🚀 Found \(pendingAnalyses.count) pending analyses")
         
         if !pendingAnalyses.isEmpty {
             // Check connectivity
-            let isConnected = deps.connectivity.isConnected
+            let isConnected = Container.shared.connectivityService().isConnected
             
             if isConnected {
                 print("🚀 Network available, starting processing...")

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Factory
 
 @MainActor
 class VideoProcessingService: ObservableObject {
@@ -7,18 +8,17 @@ class VideoProcessingService: ObservableObject {
     @Published var currentProcessingId: String?
     @Published var processingQueue: [String] = []
     
-    private let storageManager: AnalysisStorageManager
-    private let connectivityService: ConnectivityService
-    private let apiClient = APIClient()
+    @Injected(\.analysisStorageManager) private var storageManager
+    @Injected(\.connectivityService) private var connectivityService
+    @Injected(\.apiClient) private var apiClient
     
     private var activeTasks: Set<URLSessionTask> = []
     private var cancellables = Set<AnyCancellable>()
     private var connectivityCallbackId: UUID?
     private var isProcessingQueue = false
     
-    init(storageManager: AnalysisStorageManager, connectivityService: ConnectivityService) {
-        self.storageManager = storageManager
-        self.connectivityService = connectivityService
+    init() {
+        setupConnectivityMonitoring()
     }
     
     deinit {
@@ -88,7 +88,7 @@ class VideoProcessingService: ObservableObject {
     
     // MARK: - Public Methods - Setup
     
-    func setupConnectivityMonitoring(connectivityService: ConnectivityService) {
+    func setupConnectivityMonitoring() {
         // Monitor connectivity changes
         connectivityService.$isConnected
             .sink { [weak self] isConnected in

@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import AVFoundation
+import Factory
 
 enum UploadError: LocalizedError {
     case networkUnavailable
@@ -61,7 +62,7 @@ class VideoAnalysisViewModel {
     var lastAnalysisDate: Date?
     var lastAnalysisResult: AnalysisResult?
     
-    private let apiClient = APIClient()
+    @ObservationIgnored @Injected(\.apiClient) private var apiClient
     
     func loadVideo(from item: PhotosPickerItem?) async {
         guard let item = item else { return }

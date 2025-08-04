@@ -1,18 +1,22 @@
 import SwiftUI
 import AVKit
+import Factory
 
 struct HomeView: View {
-    @EnvironmentObject var deps: AppDependencies
-    @EnvironmentObject var appState: AppState
     @State private var showUploadFlow = false
     @State private var showAnalysisView = false
     @State private var showDemoVideo = false
     @State private var showCoachingVideo = false
+    @State private var showRecordingScreen = false
+    @State private var showPreviousAnalyses = false
     @State private var showDebugPanel = false
-    @State private var viewModel = VideoAnalysisViewModel()
+        @State private var viewModel: VideoAnalysisViewModel
+    
+    init() {
+        _viewModel = State(initialValue: Container.shared.videoAnalysisViewModel())
+    }
+    
     @State private var player: AVPlayer?
-    @State private var showDebugAnalysisView = false
-    @State private var debugVideoURL: URL?
     
     var body: some View {
         ZStack {
@@ -122,23 +126,26 @@ struct HomeView: View {
                         }
                 }
             }
-            .sheet(isPresented: $showDebugPanel) {
-                DebugPanelView()
-            }
-            .sheet(isPresented: $showDebugAnalysisView) {
+            .fullScreenCover(isPresented: $showRecordingScreen) {
                 NavigationStack {
-                    SwingAnalysisView(videoURL: debugVideoURL ?? getTestVideoURL(), dependencies: deps)
+                    RecordingScreen()
+                }
+            }
+            .sheet(isPresented: $showPreviousAnalyses) {
+                NavigationStack {
+                    PreviousAnalysesView()
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
-                            ToolbarItem(placement: .navigationBarTrailing) {
+                            ToolbarItem(placement: .navigationBarLeading) {
                                 Button("Done") {
-                                    showDebugAnalysisView = false
-                                    debugVideoURL = nil
+                                    showPreviousAnalyses = false
                                 }
                             }
                         }
                 }
-                .accessibilityIdentifier("debugAnalysisResultView")
+            }
+            .sheet(isPresented: $showDebugPanel) {
+                DebugPanelView()
             }
     }
     
@@ -186,7 +193,7 @@ struct HomeView: View {
         VStack(spacing: 16) {
             // Button 1: Analyze My Swing (Camera)
             Button(action: {
-                appState.navigate(to: .recording)
+                showRecordingScreen = true
                 LiquidGlassHaptics.impact(.medium)
             }) {
                 HStack {
@@ -225,7 +232,7 @@ struct HomeView: View {
             // Button 3: Previous Swing Analyses (using Button instead of NavigationLink to avoid styling issues)
             Button(action: {
                 // Navigate programmatically instead of using NavigationLink
-                appState.navigate(to: .previousAnalyses)
+                showPreviousAnalyses = true
                 LiquidGlassHaptics.impact(.medium)
             }) {
                 HStack {
@@ -260,29 +267,6 @@ struct HomeView: View {
                 .padding(.vertical, 16)
             }
             .buttonStyle(LiquidGlassPillButtonStyle())
-            
-            // DEBUG Analysis button (shown during E2E testing or debug mode)
-            if TestConfiguration.shared.isE2ETesting || Config.isDebugPanelEnabled {
-                Button(action: {
-                    debugVideoURL = getTestVideoURL()
-                    showDebugAnalysisView = true
-                    LiquidGlassHaptics.impact(.medium)
-                }) {
-                    HStack {
-                        Image(systemName: "flask.fill")
-                            .font(.title2)
-                        Text("DEBUG Analysis")
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                        Spacer()
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 16)
-                }
-                .buttonStyle(LiquidGlassPillButtonStyle())
-                .accessibilityIdentifier("debugAnalysisButton")
-            }
         }
     }
     
@@ -308,22 +292,6 @@ struct HomeView: View {
         }
         
         self.player = newPlayer
-    }
-    
-    private func getTestVideoURL() -> URL {
-        // Try to load test video from test bundle
-        if let url = Bundle.main.url(forResource: "test_video", withExtension: "mov", subdirectory: "FutureGolfTestsShared/fixtures") {
-            return url
-        }
-        
-        // Try without subdirectory
-        if let url = Bundle.main.url(forResource: "test_video", withExtension: "mov") {
-            return url
-        }
-        
-        // Fallback to documents directory
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        return documentsPath.appendingPathComponent("test_video.mov")
     }
     
     private func createDemoAnalysisResult() -> AnalysisResult {

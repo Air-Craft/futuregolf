@@ -1,6 +1,7 @@
 import SwiftUI
 import AVKit
 import AVFoundation
+import Factory
 
 // MARK: - Spacing Constants
 private enum Spacing {
@@ -11,8 +12,8 @@ private enum Spacing {
 }
 
 struct SwingAnalysisView: View {
-    @EnvironmentObject var deps: AppDependencies
-    @StateObject private var viewModel: SwingAnalysisViewModel
+    @StateObject private var viewModel = Container.shared.swingAnalysisViewModel()
+    @InjectedObject(\.appState) private var appState
     @State private var showVideoPlayer = false
     @State private var expandedSection = false
     @State private var showProgressToast = false
@@ -26,10 +27,9 @@ struct SwingAnalysisView: View {
     let overrideAnalysisId: String?
     
     @MainActor
-    init(videoURL: URL? = nil, analysisId: String? = nil, dependencies: AppDependencies) {
+    init(videoURL: URL? = nil, analysisId: String? = nil) {
         self.overrideVideoURL = videoURL
         self.overrideAnalysisId = analysisId
-        _viewModel = StateObject(wrappedValue: SwingAnalysisViewModel(dependencies: dependencies))
     }
     
     var body: some View {
@@ -88,8 +88,8 @@ struct SwingAnalysisView: View {
                 print("🎬 SwingAnalysisView: onAppear triggered")
                 
                 // Use override values for UI testing, otherwise use global state
-                let videoURL = overrideVideoURL ?? deps.currentRecordingURL
-                let analysisId = overrideAnalysisId ?? deps.currentRecordingId
+                let videoURL = overrideVideoURL ?? appState.currentRecordingURL
+                let analysisId = overrideAnalysisId ?? appState.currentRecordingId
                 
                 print("🎬 videoURL: \(videoURL?.absoluteString ?? "nil")")
                 print("🎬 analysisId: \(analysisId ?? "nil")")
@@ -98,9 +98,6 @@ struct SwingAnalysisView: View {
                     assertionFailure("SwingAnalysisView presented without video URL")
                     return
                 }
-                
-                // Pass dependencies to view model
-                // viewModel.dependencies = deps
                 
                 // Always proceed - let the view model handle connectivity
                 if let id = analysisId {
@@ -129,7 +126,7 @@ struct SwingAnalysisView: View {
                     NavigationStack {
                         VideoPlayerWithCoaching(
                             analysisResult: result,
-                            videoURL: overrideVideoURL ?? deps.currentRecordingURL ?? viewModel.videoURL ?? URL(fileURLWithPath: "")
+                            videoURL: overrideVideoURL ?? appState.currentRecordingURL ?? viewModel.videoURL ?? URL(fileURLWithPath: "")
                         )
                         .toolbar {
                             ToolbarItem(placement: .navigationBarTrailing) {
@@ -343,6 +340,5 @@ struct KeyMoment: Identifiable {
 
 // MARK: - Preview
 #Preview {
-    SwingAnalysisView(dependencies: AppDependencies())
-        .environmentObject(AppDependencies())
+    SwingAnalysisView()
 }

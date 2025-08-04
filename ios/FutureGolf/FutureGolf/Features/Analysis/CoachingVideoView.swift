@@ -1,6 +1,7 @@
 import SwiftUI
 import AVKit
 import AVFoundation
+import Factory
 
 struct CoachingVideoView: View {
     @State private var player: AVPlayer?
@@ -16,7 +17,7 @@ struct CoachingVideoView: View {
     @State private var clubheadSpeed = "100mph"
     @State private var activeTextTips: [String] = []
     @State private var timeObserver: Any?
-    @StateObject private var ttsService = TTSService.shared
+    @InjectedObject(\.ttsService) private var ttsService
     @State private var currentTTSIndex = 0
     @State private var analysisData: VideoCoachingAnalysisData?
     @State private var controlsVisible = true

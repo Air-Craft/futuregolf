@@ -1,76 +1,52 @@
 import SwiftUI
 import Combine
 import AVFoundation
+import Factory
 
 @MainActor
-@Observable
 class SwingAnalysisViewModel: ObservableObject {
     // Overall State
-    var isLoading = true
-    var isOffline = false
-    var showError = false
-    var errorMessage = ""
+    @Published var isLoading = true
+    @Published var isOffline = false
+    @Published var showError = false
+    @Published var errorMessage = ""
+    
+    @Injected(\.toastManager) private var toastManager
 
     // Processing State
-    var processingProgress: Double = 0.0
-    var processingStatus = "Checking connection"
-    var processingDetail = "Preparing for analysis..."
+    @Published var processingProgress: Double = 0.0
+    @Published var processingStatus = "Checking connection"
+    @Published var processingDetail = "Preparing for analysis..."
 
     // Analysis Data
-    var analysisResult: AnalysisResult?
-    var videoThumbnail: UIImage?
-    var keyMoments: [KeyMoment] = []
+    @Published var analysisResult: AnalysisResult?
+    @Published var videoThumbnail: UIImage?
+    @Published var keyMoments: [KeyMoment] = []
 
     // Display Data
-    var overallScore: String = "--"
-    var avgHeadSpeed: String = "-- mph"
-    var topCompliment: String = "Loading..."
-    var topCritique: String = "Loading..."
-    var summaryText: String = "Analysis in progress..."
+    @Published var overallScore: String = "--"
+    @Published var avgHeadSpeed: String = "-- mph"
+    @Published var topCompliment: String = "Loading..."
+    @Published var topCritique: String = "Loading..."
+    @Published var summaryText: String = "Analysis in progress..."
     
     // TTS State
-    var isAnalysisTTSReady = false
+    @Published var isAnalysisTTSReady = false
 
     // Dependencies
-    private var analysisService: AnalysisService?
-    private var thumbnailService: ThumbnailService
-    private var ttsCacheService: TTSCacheService
-    private var reportGenerator: AnalysisReportGenerator
-    private var connectivityService: ConnectivityService?
-    private var storageManager: AnalysisStorageManager?
-    private var appState: AppState?
+    @Injected(\.analysisService) private var analysisService
+    @Injected(\.thumbnailService) private var thumbnailService
+    @Injected(\.ttsCacheService) private var ttsCacheService
+    @Injected(\.reportGenerator) private var reportGenerator
+    @Injected(\.connectivityService) private var connectivityService
+    @Injected(\.analysisStorageManager) private var storageManager
 
     // Private state
     private var cancellables = Set<AnyCancellable>()
     private var analysisId: String?
     var videoURL: URL?
 
-    init(dependencies: AppDependencies?, appState: AppState? = nil) {
-        self.analysisService = AnalysisService(dependencies: dependencies)
-        self.thumbnailService = ThumbnailService(dependencies: dependencies)
-        self.ttsCacheService = TTSCacheService()
-        self.reportGenerator = AnalysisReportGenerator()
-        self.connectivityService = dependencies?.connectivity
-        self.storageManager = dependencies?.analysisStorage
-        self.appState = appState
-        
-        setupBindings()
-    }
-    
-    init(videoURL: URL, analysisId: String, analysisStorage: AnalysisStorageManager, videoProcessingService: VideoProcessingService, appState: AppState?) {
-        self.videoURL = videoURL
-        self.analysisId = analysisId
-        self.storageManager = analysisStorage
-        self.appState = appState
-        
-        // Initialize services with basic dependencies
-        let deps = AppDependencies()
-        self.analysisService = AnalysisService(dependencies: deps)
-        self.thumbnailService = ThumbnailService(dependencies: deps)
-        self.ttsCacheService = TTSCacheService()
-        self.reportGenerator = AnalysisReportGenerator()
-        self.connectivityService = deps.connectivity
-        
+    init() {
         setupBindings()
     }
 
@@ -89,7 +65,7 @@ class SwingAnalysisViewModel: ObservableObject {
             }
             .store(in: &cancellables)
         
-        connectivityService?.$isConnected
+        connectivityService.$isConnected
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] isConnected in
@@ -109,10 +85,10 @@ class SwingAnalysisViewModel: ObservableObject {
         
         Task {
             do {
-                let id = try await analysisService?.startNewAnalysis(videoURL: videoURL)
+                let id = try await analysisService.startNewAnalysis(videoURL: videoURL)
                 self.analysisId = id
-                await thumbnailService.generateThumbnail(for: id!, from: videoURL)
-                monitorAnalysisProgress(id: id!)
+                await thumbnailService.generateThumbnail(for: id, from: videoURL)
+                monitorAnalysisProgress(id: id)
             } catch {
                 showError(message: error.localizedDescription)
             }
@@ -129,7 +105,7 @@ class SwingAnalysisViewModel: ObservableObject {
         }
         
         Task {
-            if let storedAnalysis = storageManager?.getAnalysis(id: id) {
+            if let storedAnalysis = storageManager.getAnalysis(id: id) {
                 self.videoURL = storedAnalysis.videoURL
                 if let thumbData = storedAnalysis.thumbnailData, let thumb = UIImage(data: thumbData) {
                     self.videoThumbnail = thumb
@@ -140,7 +116,7 @@ class SwingAnalysisViewModel: ObservableObject {
                 if storedAnalysis.status == .completed, let result = storedAnalysis.analysisResult {
                     handleCompletedAnalysis(result: result)
                 } else {
-                    try? await analysisService?.loadExistingAnalysis(id: id)
+                    try await analysisService.loadExistingAnalysis(id: id)
                     monitorAnalysisProgress(id: id)
                 }
             } else {
@@ -154,7 +130,7 @@ class SwingAnalysisViewModel: ObservableObject {
         // but for now, we'll poll the storage manager as before.
         Task {
             while isLoading {
-                if let analysis = storageManager?.getAnalysis(id: id) {
+                if let analysis = storageManager.getAnalysis(id: id) {
                     switch analysis.status {
                     case .completed:
                         if let result = analysis.analysisResult {
@@ -181,15 +157,6 @@ class SwingAnalysisViewModel: ObservableObject {
 
     private func handleCompletedAnalysis(result: AnalysisResult) {
         self.analysisResult = result
-        
-        // Update AppState with the analysis
-        if let appState = appState {
-            appState.updateAnalysis(result)
-            if appState.activeAnalysisId == result.id {
-                appState.activeAnalysisId = result.id // Trigger update
-            }
-        }
-        
         updateDisplayData(from: result)
         generateKeyMoments(from: result)
         ttsCacheService.startMonitoring(for: result)
@@ -209,11 +176,11 @@ class SwingAnalysisViewModel: ObservableObject {
         if isConnected {
             if self.isOffline {
                 self.isOffline = false
-                ToastManager.shared.show("Connection restored", type: .success)
+                self.toastManager.show("Connection restored", type: .success)
                 
                 if let id = self.analysisId {
                     Task {
-                        try? await analysisService?.loadExistingAnalysis(id: id)
+                        try await self.analysisService.loadExistingAnalysis(id: id)
                     }
                 }
             }
@@ -223,7 +190,7 @@ class SwingAnalysisViewModel: ObservableObject {
                 self.isLoading = false
                 self.processingStatus = "Waiting for connectivity"
                 self.processingDetail = "Your swing will be analyzed when connection is restored"
-                ToastManager.shared.show("Waiting for connectivity...", type: .warning, duration: .infinity, id: "connectivity")
+                self.toastManager.show("Waiting for connectivity...", type: .warning, duration: .infinity, id: "connectivity")
             }
         }
     }

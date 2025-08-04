@@ -1,10 +1,10 @@
 import SwiftUI
 import AVFoundation
+import Factory
 
 struct RecordingScreen: View {
-    @EnvironmentObject var deps: AppDependencies
-    @EnvironmentObject var appState: AppState
-    @State private var viewModel: RecordingViewModel
+    @StateObject private var viewModel = Container.shared.recordingViewModel()
+    @InjectedObject(\.appState) private var appState
     @Environment(\.dismiss) private var dismiss
     @State private var showCancelConfirmation = false
     @State private var shouldNavigateToAnalysis = false
@@ -12,9 +12,7 @@ struct RecordingScreen: View {
     @State private var currentZoom: CGFloat = 1.0
     @State private var showZoomIndicator = false
     
-    init() {
-        _viewModel = State(initialValue: RecordingViewModel())
-    }
+    init() {}
     
     var body: some View {
         ZStack {
@@ -90,7 +88,8 @@ struct RecordingScreen: View {
             deviceOrientation = UIDevice.current.orientation
         }
         .onChange(of: viewModel.currentPhase, handlePhaseChange)
-        .onChange(of: deps.currentRecordingId, handleCurrentRecordingIdChanged)
+        .onChange(of: appState.currentRecordingId, handleCurrentRecordingIdChanged)
+        .navigationDestination(isPresented: $shouldNavigateToAnalysis, destination: analysisDestination)
         .confirmationDialog("Cancel Recording", isPresented: $showCancelConfirmation, actions: cancelConfirmationActions, message: cancelConfirmationMessage)
         .alert("Recording Error", isPresented: .constant(viewModel.currentPhase == .error), actions: errorAlertActions, message: errorAlertMessage)
         .accessibilityIdentifier("RecordingScreen")
@@ -111,8 +110,6 @@ struct RecordingScreen: View {
     }
     
     private func setupScreen() {
-        viewModel.dependencies = deps
-        viewModel.appState = appState
         Task {
             do {
                 try await viewModel.setupCamera()
@@ -127,14 +124,14 @@ struct RecordingScreen: View {
     }
     
     private func handlePhaseChange(oldValue: RecordingPhase, newValue: RecordingPhase) {
-        if newValue == .processing && deps.currentRecordingId != nil {
-            // The navigation is now handled by RecordingNavigationWrapper watching appState.currentRecordingId
+        if newValue == .processing && appState.currentRecordingId != nil {
+            shouldNavigateToAnalysis = true
         }
     }
     
     private func handleCurrentRecordingIdChanged(oldValue: String?, newValue: String?) {
         if let id = newValue, viewModel.currentPhase == .processing {
-            // The navigation is now handled by RecordingNavigationWrapper watching appState.currentRecordingId
+            shouldNavigateToAnalysis = true
         }
     }
     
@@ -158,6 +155,10 @@ struct RecordingScreen: View {
                 }
             }
         }
+    }
+    
+    private func analysisDestination() -> some View {
+        SwingAnalysisView()
     }
     
     @ViewBuilder

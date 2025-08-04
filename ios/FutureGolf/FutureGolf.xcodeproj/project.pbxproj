@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		D3B2E6CC2E40BB3300D4222E /* Factory in Frameworks */ = {isa = PBXBuildFile; productRef = D3B2E6CB2E40BB3300D4222E /* Factory */; };
 		D3B2E6CE2E40BB3300D4222E /* FactoryTesting in Frameworks */ = {isa = PBXBuildFile; productRef = D3B2E6CD2E40BB3300D4222E /* FactoryTesting */; };
+		D3B2E7B22E40D59A00D4222E /* FactoryKit in Frameworks */ = {isa = PBXBuildFile; productRef = D3B2E7B12E40D59A00D4222E /* FactoryKit */; };
+		D3B2E7B42E40D59A00D4222E /* FactoryTesting in Frameworks */ = {isa = PBXBuildFile; productRef = D3B2E7B32E40D59A00D4222E /* FactoryTesting */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -113,6 +115,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D3B2E7B22E40D59A00D4222E /* FactoryKit in Frameworks */,
 				D3B2E6CC2E40BB3300D4222E /* Factory in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -129,6 +132,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D3B2E7B42E40D59A00D4222E /* FactoryTesting in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -177,6 +181,7 @@
 			name = FutureGolf;
 			packageProductDependencies = (
 				D3B2E6CB2E40BB3300D4222E /* Factory */,
+				D3B2E7B12E40D59A00D4222E /* FactoryKit */,
 			);
 			productName = FutureGolf;
 			productReference = 37361DE02E33FCC900909D7E /* FutureGolf.app */;
@@ -225,6 +230,7 @@
 			);
 			name = FutureGolfUITests;
 			packageProductDependencies = (
+				D3B2E7B32E40D59A00D4222E /* FactoryTesting */,
 			);
 			productName = FutureGolfUITests;
 			productReference = 37361DF72E33FCCA00909D7E /* FutureGolfUITests.xctest */;
@@ -679,6 +685,16 @@
 			productName = Factory;
 		};
 		D3B2E6CD2E40BB3300D4222E /* FactoryTesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D3B2E6CA2E40BB3300D4222E /* XCRemoteSwiftPackageReference "Factory" */;
+			productName = FactoryTesting;
+		};
+		D3B2E7B12E40D59A00D4222E /* FactoryKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D3B2E6CA2E40BB3300D4222E /* XCRemoteSwiftPackageReference "Factory" */;
+			productName = FactoryKit;
+		};
+		D3B2E7B32E40D59A00D4222E /* FactoryTesting */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D3B2E6CA2E40BB3300D4222E /* XCRemoteSwiftPackageReference "Factory" */;
 			productName = FactoryTesting;
