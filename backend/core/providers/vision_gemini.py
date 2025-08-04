@@ -29,7 +29,7 @@ def get_api_key():
     return _api_key
 
 
-class GeminiVisionModel(VisionModel):
+class GeminiVisionProvider(VisionModel):
     """Direct Gemini API implementation of vision model"""
     
     def __init__(self, model_name: str = "gemini-1.5-flash", temperature: float = 0.1, max_tokens: int = 300):
@@ -45,14 +45,49 @@ class GeminiVisionModel(VisionModel):
         self.temperature = temperature
         self.max_tokens = max_tokens
         
-        # Initialize Gemini model
         self.model = genai.GenerativeModel(
             model_name=model_name,
             generation_config=genai.GenerationConfig(
                 temperature=temperature,
                 max_output_tokens=max_tokens,
+                response_mime_type="application/json",
             )
         )
+
+    async def analyze_video(self, video_path: str, prompt: str) -> Dict[str, Any]:
+        """
+        Analyze a video file using Gemini.
+        """
+        try:
+            logger.info(f"Uploading video to Gemini: {video_path}")
+            video_file = genai.upload_file(path=video_path)
+
+            logger.info(f"Calling Gemini API with model: {self.model_name}")
+            response = self.model.generate_content([prompt, video_file])
+            
+            parsed_result = json.loads(response.text.strip())
+            return parsed_result
+
+        except Exception as e:
+            logger.error(f"Error in Gemini video analysis: {e}", exc_info=True)
+            return {"error": str(e)}
+        finally:
+            if 'video_file' in locals():
+                genai.delete_file(video_file.name)
+
+    async def is_healthy(self) -> bool:
+        """Check if the Gemini API is healthy by listing available models."""
+        try:
+            api_key = get_api_key()
+            if not api_key:
+                logger.error("Cannot check Gemini health: No API key configured")
+                return False
+            
+            models = [m for m in genai.list_models()]
+            return len(models) > 0
+        except Exception as e:
+            logger.error(f"Gemini health check failed: {e}", exc_info=True)
+            return False
     
     async def analyze_images(self, images: List[Image.Image], prompt: str) -> Dict[str, Any]:
         """

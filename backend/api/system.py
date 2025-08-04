@@ -4,13 +4,6 @@ from config.api import API_VERSION_PREFIX
 
 router = APIRouter(prefix=API_VERSION_PREFIX, tags=["system"])
 
-@router.get("/health")
-async def health_check():
-    """
-    Health check endpoint
-    """
-    return {"status": "healthy", "service": "FutureGolf API"}
-
 @router.get("/auth/config")
 async def get_auth_config():
     """

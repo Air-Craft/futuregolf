@@ -317,7 +317,7 @@ async def test_swing_detection_three_swings(server_or_live, extract_test_frames,
         print(f"Sample frame 10: {frames[10]}")
         
         # Connect to WebSocket using appropriate server URL
-        ws_url = server_or_live.get_ws_url("/ws/detect-golf-swing")
+        ws_url = server_or_live.get_ws_url("/api/v1/ws/detect-golf-swing")
         print(f"🔗 About to connect to WebSocket URL: {ws_url}")
         await client.connect(ws_url)
         print(f"✅ Connected to WebSocket endpoint: {ws_url}")
