@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D3B2E6CC2E40BB3300D4222E /* Factory in Frameworks */ = {isa = PBXBuildFile; productRef = D3B2E6CB2E40BB3300D4222E /* Factory */; };
+		D3B2E6CE2E40BB3300D4222E /* FactoryTesting in Frameworks */ = {isa = PBXBuildFile; productRef = D3B2E6CD2E40BB3300D4222E /* FactoryTesting */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		37361DEE2E33FCCA00909D7E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -108,6 +113,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D3B2E6CC2E40BB3300D4222E /* Factory in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -115,6 +121,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D3B2E6CE2E40BB3300D4222E /* FactoryTesting in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -169,6 +176,7 @@
 			);
 			name = FutureGolf;
 			packageProductDependencies = (
+				D3B2E6CB2E40BB3300D4222E /* Factory */,
 			);
 			productName = FutureGolf;
 			productReference = 37361DE02E33FCC900909D7E /* FutureGolf.app */;
@@ -192,6 +200,7 @@
 			);
 			name = FutureGolfTests;
 			packageProductDependencies = (
+				D3B2E6CD2E40BB3300D4222E /* FactoryTesting */,
 			);
 			productName = FutureGolfTests;
 			productReference = 37361DED2E33FCCA00909D7E /* FutureGolfTests.xctest */;
@@ -253,6 +262,9 @@
 			);
 			mainGroup = 37361DD72E33FCC900909D7E;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D3B2E6CA2E40BB3300D4222E /* XCRemoteSwiftPackageReference "Factory" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 37361DE12E33FCC900909D7E /* Products */;
 			projectDirPath = "";
@@ -648,6 +660,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D3B2E6CA2E40BB3300D4222E /* XCRemoteSwiftPackageReference "Factory" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "git@github.com:hmlongco/Factory.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D3B2E6CB2E40BB3300D4222E /* Factory */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D3B2E6CA2E40BB3300D4222E /* XCRemoteSwiftPackageReference "Factory" */;
+			productName = Factory;
+		};
+		D3B2E6CD2E40BB3300D4222E /* FactoryTesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D3B2E6CA2E40BB3300D4222E /* XCRemoteSwiftPackageReference "Factory" */;
+			productName = FactoryTesting;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 37361DD82E33FCC900909D7E /* Project object */;
 }
