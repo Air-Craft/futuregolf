@@ -50,3 +50,5 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 **/xcuserdata/**
+**/xcshareddata/**
+xcshareddata/
