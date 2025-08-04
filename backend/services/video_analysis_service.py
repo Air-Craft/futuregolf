@@ -16,73 +16,23 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-try:
-    from google import genai
-    from google.genai import types
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-    logging.warning("Google Gemini AI not available. Install google-genai package.")
-
-from database.config import AsyncSessionLocal
-from models.video_analysis import VideoAnalysis, AnalysisStatus
-from models.video import Video
-from services.storage_service import get_storage_service
-import aiofiles
-import tempfile
-
 logger = logging.getLogger(__name__)
 
 
+from core.providers.vision_gemini import GeminiVisionProvider
+
 class CleanVideoAnalysisService:
-    """Clean video analysis service using the same logic as analyze_video.py"""
+    """Clean video analysis service using the GeminiVisionProvider"""
     
-    def __init__(self, model_name="gemini-2.5-flash"):
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
+    def __init__(self, model_name="gemini-1.5-flash"):
         self.model_name = model_name
+        self.vision_provider = GeminiVisionProvider(model_name=self.model_name)
         
         try:
             self.storage_service = get_storage_service()
         except Exception as e:
             logger.warning(f"Storage service not available: {e}")
             self.storage_service = None
-        
-        if not GEMINI_AVAILABLE:
-            logger.error("Google Gemini AI not available")
-            raise RuntimeError("Google Gemini AI not available. Install google-genai package.")
-        
-        if not self.gemini_api_key:
-            logger.error("GEMINI_API_KEY not found in environment variables")
-            raise RuntimeError("GEMINI_API_KEY not found in environment variables")
-        
-        # Configure Gemini AI with new v2 API (exact same as analyze_video.py)
-        self.client = genai.Client(api_key=self.gemini_api_key)
-        
-        # Safety settings - using new API format
-        self.safety_settings = [
-            types.SafetySetting(
-                category='HARM_CATEGORY_HATE_SPEECH',
-                threshold='BLOCK_MEDIUM_AND_ABOVE'
-            ),
-            types.SafetySetting(
-                category='HARM_CATEGORY_DANGEROUS_CONTENT',
-                threshold='BLOCK_MEDIUM_AND_ABOVE'
-            ),
-            types.SafetySetting(
-                category='HARM_CATEGORY_SEXUALLY_EXPLICIT',
-                threshold='BLOCK_MEDIUM_AND_ABOVE'
-            ),
-            types.SafetySetting(
-                category='HARM_CATEGORY_HARASSMENT',
-                threshold='BLOCK_MEDIUM_AND_ABOVE'
-            ),
-        ]
-        
-        # Generation config (exact same as analyze_video.py)
-        self.generation_config = types.GenerateContentConfig(
-            response_mime_type="application/json",
-            safety_settings=self.safety_settings
-        )
         
         logger.info(f"Clean VideoAnalysisService initialized with model: {self.model_name}")
     
@@ -141,88 +91,21 @@ class CleanVideoAnalysisService:
                 logger.error(f"KeyError during prompt formatting: {ke}")
                 raise RuntimeError(f"Prompt formatting failed: {ke}")
             
-            # Upload video to Gemini (exact same as analyze_video.py)
-            file_size_mb = os.path.getsize(video_path) / 1024 / 1024
-            logger.info(f"Uploading video to Gemini ({file_size_mb:.1f}MB)...")
-            upload_start = time.time()
+            # Analyze video using the vision provider
+            analysis_result = await self.vision_provider.analyze_video(video_path, enhanced_prompt)
             
-            video_file = await self.client.aio.files.upload(file=video_path)
-            
-            # Wait for processing (exact same as analyze_video.py)
-            processing_count = 0
-            while video_file.state.name == "PROCESSING":
-                processing_count += 1
-                if processing_count > 30:  # Max 60 seconds wait
-                    raise RuntimeError("Gemini video processing timeout")
-                logger.info(f"Waiting for Gemini video processing... ({processing_count * 2}s elapsed)")
-                await asyncio.sleep(2)
-                video_file = await self.client.aio.files.get(name=video_file.name)
-            
-            upload_elapsed = time.time() - upload_start
-            logger.info(f"Video uploaded and processed in {upload_elapsed:.1f}s")
-            
-            if video_file.state.name == "FAILED":
-                raise RuntimeError("Gemini video processing FAILED")
-            
-            # Generate analysis (exact same as analyze_video.py)
-            logger.info(f"Calling Gemini API with model: {self.model_name}")
-            api_start_time = time.time()
-            
-            try:
-                response = await self.client.aio.models.generate_content(
-                    model=self.model_name,
-                    contents=[video_file, enhanced_prompt],
-                    config=self.generation_config
-                )
-                logger.info("Gemini API call completed successfully")
-            except Exception as api_error:
-                logger.error(f"Gemini API call failed: {type(api_error).__name__}: {api_error}")
-                raise RuntimeError(f"Gemini API call failed: {api_error}")
-            
-            api_elapsed = time.time() - api_start_time
+            api_elapsed = analysis_result.get('_metadata', {}).get('analysis_duration', 0)
             logger.info(f"Gemini response received in {api_elapsed:.1f}s")
             
-            # Parse response (exact same validation as analyze_video.py)
-            try:
-                response_text = response.text
-                logger.info(f"Response length: {len(response_text)} characters")
-                
-                # Parse JSON
-                parsed_result = json.loads(response_text.strip())
-                logger.info("Response is valid JSON")
-                logger.info(f"JSON structure: {list(parsed_result.keys())}")
-                
-                # Add metadata
-                parsed_result['_metadata'] = {
-                    'analysis_duration': api_elapsed,
-                    'video_duration': duration,
-                    'video_fps': fps,
-                    'frame_count': frame_count,
-                    'model_used': self.model_name,
-                    'analysis_timestamp': datetime.utcnow().isoformat()
-                }
-                
-                return parsed_result
-                
-            except json.JSONDecodeError as e:
-                logger.error(f"Response is not valid JSON: {e}")
-                logger.error(f"Raw response: {response_text[:500]}...")
-                raise RuntimeError(f"Invalid JSON response from Gemini: {e}")
-            except Exception as e:
-                logger.error(f"Error accessing response text: {e}")
-                raise RuntimeError(f"Error processing Gemini response: {e}")
+            # Add additional metadata
+            analysis_result['_metadata']['video_duration'] = duration
+            analysis_result['_metadata']['video_fps'] = fps
+            analysis_result['_metadata']['frame_count'] = frame_count
             
+            return analysis_result
         except Exception as e:
             logger.error(f"Video analysis failed: {e}")
             raise
-        finally:
-            # Clean up Gemini file
-            try:
-                if 'video_file' in locals():
-                    await self.client.aio.files.delete(name=video_file.name)
-                    logger.info("Cleaned up uploaded Gemini file")
-            except Exception as cleanup_error:
-                logger.warning(f"Failed to cleanup Gemini file: {cleanup_error}")
     
     async def download_video_from_storage(self, video_blob_name: str) -> str:
         """Download video from storage to temporary file"""

@@ -43,7 +43,7 @@ except Exception as e:
 class TTSRequest(BaseModel):
     text: str
     voice: Optional[str] = "alloy"  # alloy, echo, fable, onyx, nova, shimmer
-    model: Optional[str] = "tts-1"  # tts-1 or tts-1-hd
+    model: Optional[str] = "tts-1-hd"  # tts-1 or tts-1-hd
     speed: Optional[float] = 1.0    # 0.25 to 4.0
     response_format: Optional[str] = "mp3"  # mp3, opus, aac, flac
 

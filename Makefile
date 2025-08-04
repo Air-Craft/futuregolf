@@ -18,7 +18,7 @@ apibase:
 backend:
 	@echo "🔧 Starting backend on $$(make -s apibase):$${PORT:-8000}..." 
 	@echo "   Be sure to update your Config.swift!"
-	@PORT=$${PORT:-8000} && \
+	PORT=$${PORT:-8000} && \
 	cd backend && PORT=$$PORT pdm run python start_server.py
 
 # Setup development environment

@@ -5,7 +5,7 @@ from typing import Dict, Any, Type, Optional
 import logging
 
 from core.interfaces import VisionModel, PromptLoader, ConfigProvider
-from core.providers.vision_gemini import GeminiVisionModel
+from core.providers.vision_gemini import GeminiVisionProvider
 from core.providers.prompt_loader import FilePromptLoader
 from core.providers.config_provider import EnvironmentConfigProvider
 
@@ -83,7 +83,7 @@ def configure_container(config_module: Optional[Any] = None):
         if model_name.startswith("gemini/"):
             model_name = model_name.replace("gemini/", "")
         
-        return GeminiVisionModel(
+        return GeminiVisionProvider(
             model_name=model_name,
             temperature=0.1,
             max_tokens=300
