@@ -31,6 +31,7 @@ class RecordingViewModel: NSObject, ObservableObject {
     var swingCount = 0
     
     private var recordingStartTime: Date?
+    private var lastCaptureTimeInterval: TimeInterval = 0
     
     // MARK: - Other Properties
     var isLeftHandedMode = false
@@ -110,6 +111,8 @@ class RecordingViewModel: NSObject, ObservableObject {
         currentPhase = .recording
         isRecording = true
         recordingStartTime = Date()
+        lastCaptureTimeInterval = Date.now.timeIntervalSince1970
+        
         startDisplayLink()
         
         showPositioningIndicator = false
@@ -209,6 +212,11 @@ class RecordingViewModel: NSObject, ObservableObject {
     
     private func handleCapturedFrame(_ image: UIImage) {
         guard isRecording else { return }
+        let now = Date.now.timeIntervalSince1970
+        if now - lastCaptureTimeInterval < Config.stillCaptureInterval {
+            return
+        }
+        lastCaptureTimeInterval = now
         
         let task = Task { [weak self] in
             guard let self = self else { return }

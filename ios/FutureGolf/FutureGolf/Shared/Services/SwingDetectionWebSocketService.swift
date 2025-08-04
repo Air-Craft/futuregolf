@@ -166,6 +166,12 @@ class SwingDetectionWebSocketService: NSObject, ObservableObject {
         let jsonString = String(data: data, encoding: .utf8)!
         let message = URLSessionWebSocketTask.Message.string(jsonString)
         
+        struct Count {
+            static var count = 0
+        }
+        Count.count += 1
+        print("Sending frame \(Count.count) to server with timestamp: \(timestamp)")
+        
         try await webSocketTask.send(message)
     }
     

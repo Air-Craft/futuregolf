@@ -20,25 +20,28 @@ struct FutureGolfApp: App {
     private let debugLaunchRecording = ProcessInfo.processInfo.environment["DEBUG_LAUNCH_RECORDING"] == "1"
     @Injected(\.debugService) private var debugService
     @Injected(\.toastManager) private var toastManager
+    @Injected(\.connectivityService) private var connectivityService
     
     init() {
         // Test server connectivity at launch
         testServerConnection()
+        connectivityService.startMonitoring()
     }
     
     var body: some Scene {
         WindowGroup {
-            if TestConfiguration.shared.shouldShowSwingAnalysisDirectly {
-                // For UI testing - go directly to SwingAnalysisView
-                SwingAnalysisView(
-                    videoURL: getTestVideoURL(),
-                    analysisId: "test-analysis-001"
-                )
-                .withToastOverlay()
-                .onAppear {
-                    setupTestEnvironment()
-                }
-            } else if debugLaunchRecording {
+//            if TestConfiguration.shared.shouldShowSwingAnalysisDirectly {
+//                // For UI testing - go directly to SwingAnalysisView
+//                SwingAnalysisView(
+//                    videoURL: getTestVideoURL(),
+//                    analysisId: "test-analysis-001"
+//                )
+//                .withToastOverlay()
+//                .onAppear {
+//                    setupTestEnvironment()
+//                }
+//            } else
+            if debugLaunchRecording {
                 // Launch directly into recording screen for testing
                 NavigationStack {
                     DebugRecordingLauncher()
@@ -133,9 +136,9 @@ struct FutureGolfApp: App {
         
         // Show connectivity status on launch if not connected
         if !isConnected {
-            toastManager.show("Waiting for connectivity...", 
-                                   type: .warning, 
-                                   duration: .infinity, 
+            toastManager.show("Waiting for connectivity...",
+                                   type: .warning,
+                                   duration: .infinity,
                                    id: "connectivity")
         }
         

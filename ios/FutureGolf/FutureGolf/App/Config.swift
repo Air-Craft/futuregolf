@@ -70,7 +70,7 @@ struct Config {
     static let targetSwingCount = 3
     
     /// Frame capture interval for swing detection (in seconds)
-    static let stillCaptureInterval: TimeInterval = 0.2
+    static let stillCaptureInterval: TimeInterval = 0.3
     
     static let swingDetectConfidenceThreshold: Float = 0.70
     
@@ -83,7 +83,7 @@ struct Config {
     // MARK: - Image Processing Configuration
     
     /// Target box size for resizing images (maintains aspect ratio)
-    static let imageMaxSize = CGSize(width: 128, height: 128)
+    static let imageMaxSize = CGSize(width: 96, height: 96)
     
     /// JPEG compression quality (0.0-1.0) - equivalent to WebP quality 40
     static let imageJPEGQuality: CGFloat = 0.4
