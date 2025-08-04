@@ -36,9 +36,7 @@ class OnDeviceSTTService: NSObject, ObservableObject {
         "cancel",
         "abort",
         "end",
-        "that's enough",
-        "I've had enough",
-        "that is enough"
+        "enough"
     ]
     
     override init() {

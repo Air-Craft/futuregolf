@@ -13,12 +13,10 @@ private enum Spacing {
 
 struct SwingAnalysisView: View {
     @StateObject private var viewModel = Container.shared.swingAnalysisViewModel()
-    @InjectedObject(\.appState) private var appState
+    @Injected(\.appState) private var appState: AppState
     @State private var showVideoPlayer = false
     @State private var expandedSection = false
     @State private var showProgressToast = false
-    @State private var showPreviousAnalyses = false
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -33,125 +31,119 @@ struct SwingAnalysisView: View {
     }
     
     var body: some View {
-        NavigationStack {
-            ZStack {
-                // Background
-                Color(UIColor.systemBackground)
-                    .ignoresSafeArea()
-                
-                Group {
-                    if viewModel.isLoading || viewModel.isOffline {
-                        processingView
-                            .transition(.opacity.combined(with: .scale))
-                    } else if viewModel.analysisResult != nil {
-                        analysisContentView
-                            .liquidGlassTransition(isVisible: !viewModel.isLoading)
-                    } else {
-                        // Show processing view as default when no result yet
-                        processingView
-                            .transition(.opacity.combined(with: .scale))
-                    }
-                }
-                .onAppear {
-                    print("🎬 SwingAnalysisView: View appeared")
-                    print("🎬 isOffline: \(viewModel.isOffline)")
-                    print("🎬 isLoading: \(viewModel.isLoading)")
-                    print("🎬 analysisResult: \(viewModel.analysisResult != nil)")
-                }
-            }
-            .navigationTitle(viewModel.isOffline ? "Waiting for Connection" : viewModel.isLoading ? "Processing Swing" : "Swing Analysis")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        showPreviousAnalyses = true
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                            Text("Back")
-                        }
-                    }
-                }
-                
-                if !viewModel.isLoading {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button(action: {
-                            // Share functionality
-                        }) {
-                            Image(systemName: "square.and.arrow.up")
-                                .symbolRenderingMode(.hierarchical)
-                        }
-                    }
+        ZStack {
+            // Background
+            Color(UIColor.systemBackground)
+                .ignoresSafeArea()
+            
+            Group {
+                if viewModel.isLoading || viewModel.isOffline {
+                    processingView
+                        .transition(.opacity.combined(with: .scale))
+                } else if viewModel.analysisResult != nil {
+                    analysisContentView
+                        .liquidGlassTransition(isVisible: !viewModel.isLoading)
+                } else {
+                    // Show processing view as default when no result yet
+                    processingView
+                        .transition(.opacity.combined(with: .scale))
                 }
             }
             .onAppear {
-                print("🎬 SwingAnalysisView: onAppear triggered")
-                
-                // Use override values for UI testing, otherwise use global state
-                let videoURL = overrideVideoURL ?? appState.currentRecordingURL
-                let analysisId = overrideAnalysisId ?? appState.currentRecordingId
-                
-                print("🎬 videoURL: \(videoURL?.absoluteString ?? "nil")")
-                print("🎬 analysisId: \(analysisId ?? "nil")")
-                
-                guard let videoURL = videoURL else {
-                    assertionFailure("SwingAnalysisView presented without video URL")
-                    return
-                }
-                
-                // Always proceed - let the view model handle connectivity
-                if let id = analysisId {
-                    print("🎬 Loading existing analysis: \(id)")
-                    viewModel.loadExistingAnalysis(id: id)
-                } else {
-                    print("🎬 Starting new analysis")
-                    viewModel.startNewAnalysis(videoURL: videoURL)
+                print("🎬 SwingAnalysisView: View appeared")
+                print("🎬 isOffline: \(viewModel.isOffline)")
+                print("🎬 isLoading: \(viewModel.isLoading)")
+                print("🎬 analysisResult: \(viewModel.analysisResult != nil)")
+            }
+        }
+        .navigationTitle(viewModel.isOffline ? "Waiting for Connection" : viewModel.isLoading ? "Processing Swing" : "Swing Analysis")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    appState.popToRoot()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Home")
+                    }
                 }
             }
-            .onChange(of: viewModel.isLoading) { _, isLoading in
-                if !isLoading && viewModel.analysisResult != nil {
-                    // Play completion sound
-                    AudioServicesPlaySystemSound(1057)
+            
+            if !viewModel.isLoading {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        // Share functionality
+                    }) {
+                        Image(systemName: "square.and.arrow.up")
+                            .symbolRenderingMode(.hierarchical)
+                    }
                 }
             }
-            .onDisappear {
-                if viewModel.isLoading {
-                    showProgressToast = true
-                }
-                viewModel.cleanup()
+        }
+        .onAppear {
+            print("🎬 SwingAnalysisView: onAppear triggered")
+            
+            // Use override values for UI testing, otherwise use global state
+            let videoURL = overrideVideoURL ?? appState.currentRecordingURL
+            let analysisId = overrideAnalysisId ?? appState.currentRecordingId
+            
+            print("🎬 videoURL: \(videoURL?.absoluteString ?? "nil")")
+            print("🎬 analysisId: \(analysisId ?? "nil")")
+            
+            guard let videoURL = videoURL else {
+                assertionFailure("SwingAnalysisView presented without video URL")
+                return
             }
-            .accessibilityIdentifier("SwingAnalysisView")
-            .sheet(isPresented: $showVideoPlayer) {
-                if let result = viewModel.analysisResult {
-                    NavigationStack {
-                        VideoPlayerWithCoaching(
-                            analysisResult: result,
-                            videoURL: overrideVideoURL ?? appState.currentRecordingURL ?? viewModel.videoURL ?? URL(fileURLWithPath: "")
-                        )
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarTrailing) {
-                                Button("Done") {
-                                    showVideoPlayer = false
-                                }
+            
+            // Always proceed - let the view model handle connectivity
+            if let id = analysisId {
+                print("🎬 Loading existing analysis: \(id)")
+                viewModel.loadExistingAnalysis(id: id)
+            } else {
+                print("🎬 Starting new analysis")
+                viewModel.startNewAnalysis(videoURL: videoURL)
+            }
+        }
+        .onChange(of: viewModel.isLoading) { _, isLoading in
+            if !isLoading && viewModel.analysisResult != nil {
+                // Play completion sound
+                AudioServicesPlaySystemSound(1057)
+            }
+        }
+        .onDisappear {
+            if viewModel.isLoading {
+                showProgressToast = true
+            }
+            viewModel.cleanup()
+        }
+        .accessibilityIdentifier("SwingAnalysisView")
+        .sheet(isPresented: $showVideoPlayer) {
+            if let result = viewModel.analysisResult {
+                NavigationStack {
+                    VideoPlayerWithCoaching(
+                        analysisResult: result,
+                        videoURL: overrideVideoURL ?? appState.currentRecordingURL ?? viewModel.videoURL ?? URL(fileURLWithPath: "")
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Done") {
+                                showVideoPlayer = false
                             }
                         }
                     }
                 }
             }
-            // Progress Toast Overlay
-            .overlay(alignment: .bottom) {
-                if showProgressToast && viewModel.isLoading {
-                    ProgressToastView(
-                        progress: viewModel.processingProgress,
-                        message: viewModel.processingStatus
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .fullScreenCover(isPresented: $showPreviousAnalyses) {
-                NavigationStack {
-                    PreviousAnalysesView()
-                }
+        }
+        // Progress Toast Overlay
+        .overlay(alignment: .bottom) {
+            if showProgressToast && viewModel.isLoading {
+                ProgressToastView(
+                    progress: viewModel.processingProgress,
+                    message: viewModel.processingStatus
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
     }

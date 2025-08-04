@@ -32,6 +32,7 @@ class RecordingViewModel: NSObject, ObservableObject {
     
     private var recordingStartTime: Date?
     private var lastCaptureTimeInterval: TimeInterval = 0
+    private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Other Properties
     var isLeftHandedMode = false
@@ -39,9 +40,6 @@ class RecordingViewModel: NSObject, ObservableObject {
     var showPositioningIndicator = true
     var showProgressCircles = false
     var currentFrameRate: Double = 0.0
-    var recordedVideoURL: URL?
-    var recordedAnalysisId: String?
-    var recordingSessionId = UUID()
     
     var captureSession: AVCaptureSession? { cameraService.captureSession }
     
@@ -105,8 +103,6 @@ class RecordingViewModel: NSObject, ObservableObject {
     func startRecording() {
         guard currentPhase == .setup else { return }
         
-        recordingSessionId = UUID()
-        
         // Start recording state
         currentPhase = .recording
         isRecording = true
@@ -165,6 +161,9 @@ class RecordingViewModel: NSObject, ObservableObject {
         recordingService.stopRecording()
         voiceCommandService.stopListening()
         
+        // Got to wait for the URL before seguing...see handle....
+        
+        
         if !Config.disableSwingDetection {
             swingDetectionWebSocketService.endDetection()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
@@ -177,10 +176,14 @@ class RecordingViewModel: NSObject, ObservableObject {
     
     private func handleRecordingCompletion(url: URL) {
         print("📝 RecordingViewModel: Handling recording completion for URL: \(url.path)")
-        self.recordedVideoURL = url
-        self.recordedAnalysisId = videoProcessingService.queueVideo(videoURL: url)
-        print("📝 RecordingViewModel: Queued video with Analysis ID: \(self.recordedAnalysisId ?? "nil")")
-        appState.setCurrentRecording(url: url, id: self.recordedAnalysisId!)
+        self.appState.currentRecordingURL = url
+        self.appState.currentRecordingId = videoProcessingService.queueVideo(videoURL: url)
+        print("📝 RecordingViewModel: Queued video with Analysis ID: \(appState.currentRecordingId ?? "nil"), url: \(url.path)")
+        Task { @MainActor in
+            print("🚀 RecordingViewModel: Navigating to SwingAnalysisView")
+            self.appState.navigateTo(.swingAnalysis(videoURL: url, analysisId: self.appState.currentRecordingId))
+        }
+
     }
     
     private func startTimeoutTimer() {
@@ -259,7 +262,8 @@ class RecordingViewModel: NSObject, ObservableObject {
     }
     
     func cleanup() {
-        recordingSessionId = UUID()
+        cancellables.forEach { $0.cancel() }
+        cancellables.removeAll()
         stopDisplayLink()
         timeoutTimer?.invalidate()
         timeoutTimer = nil

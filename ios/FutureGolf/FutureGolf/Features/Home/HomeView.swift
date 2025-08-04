@@ -3,14 +3,8 @@ import AVKit
 import Factory
 
 struct HomeView: View {
-    @State private var showUploadFlow = false
-    @State private var showAnalysisView = false
-    @State private var showDemoVideo = false
-    @State private var showCoachingVideo = false
-    @State private var showRecordingScreen = false
-    @State private var showPreviousAnalyses = false
-    @State private var showDebugPanel = false
-        @State private var viewModel: VideoAnalysisViewModel
+    @InjectedObservable(\.appState) private var appState: AppState
+    @State private var viewModel: VideoAnalysisViewModel
     
     init() {
         _viewModel = State(initialValue: Container.shared.videoAnalysisViewModel())
@@ -52,7 +46,7 @@ struct HomeView: View {
                     HStack {
                         Spacer()
                         Button(action: {
-                            showDebugPanel = true
+                            // showDebugPanel = true
                         }) {
                             Image(systemName: "ladybug.fill")
                                 .font(.title2)
@@ -67,86 +61,9 @@ struct HomeView: View {
             }
         }
         .ignoresSafeArea(.all)
-            .sheet(isPresented: $showUploadFlow) {
-                UploadVideoJourneyView(viewModel: viewModel)
-            }
-            .sheet(isPresented: $showAnalysisView) {
-                if let result = viewModel.analysisResult {
-                    NavigationStack {
-                        AnalysisResultView(result: result)
-                            .navigationBarTitleDisplayMode(.inline)
-                            .toolbar {
-                                ToolbarItem(placement: .navigationBarTrailing) {
-                                    Button("Done") {
-                                        showAnalysisView = false
-                                    }
-                                }
-                            }
-                    }
-                }
-            }
-            .onChange(of: viewModel.analysisResult) { _, newResult in
-                if newResult != nil {
-                    showAnalysisView = true
-                }
-            }
-            .onAppear {
-                setupBackgroundVideo()
-            }
-            .sheet(isPresented: $showDemoVideo) {
-                NavigationStack {
-                    let demoResult = createDemoAnalysisResult()
-                    let videoPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.appendingPathComponent("home_bg_video.mp4")
-                    
-                    VideoPlayerWithCoaching(
-                        analysisResult: demoResult,
-                        videoURL: videoPath
-                    )
-                    .navigationBarTitleDisplayMode(.inline)
-                    .navigationTitle("Demo Analysis")
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarLeading) {
-                            Button("Done") {
-                                showDemoVideo = false
-                            }
-                        }
-                    }
-                }
-            }
-            .sheet(isPresented: $showCoachingVideo) {
-                NavigationStack {
-                    CoachingVideoView()
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button("Done") {
-                                    showCoachingVideo = false
-                                }
-                            }
-                        }
-                }
-            }
-            .fullScreenCover(isPresented: $showRecordingScreen) {
-                NavigationStack {
-                    RecordingScreen()
-                }
-            }
-            .sheet(isPresented: $showPreviousAnalyses) {
-                NavigationStack {
-                    PreviousAnalysesView()
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button("Done") {
-                                    showPreviousAnalyses = false
-                                }
-                            }
-                        }
-                }
-            }
-            .sheet(isPresented: $showDebugPanel) {
-                DebugPanelView()
-            }
+        .onAppear {
+            setupBackgroundVideo()
+        }
     }
     
     // MARK: - Title Section
@@ -193,7 +110,7 @@ struct HomeView: View {
         VStack(spacing: 16) {
             // Button 1: Analyze My Swing (Camera)
             Button(action: {
-                showRecordingScreen = true
+                appState.navigateTo(.recording)
                 LiquidGlassHaptics.impact(.medium)
             }) {
                 HStack {
@@ -212,7 +129,6 @@ struct HomeView: View {
             
             // Button 2: Upload Swing Video
             Button(action: {
-                showUploadFlow = true
                 LiquidGlassHaptics.impact(.medium)
             }) {
                 HStack {
@@ -232,7 +148,8 @@ struct HomeView: View {
             // Button 3: Previous Swing Analyses (using Button instead of NavigationLink to avoid styling issues)
             Button(action: {
                 // Navigate programmatically instead of using NavigationLink
-                showPreviousAnalyses = true
+                // showPreviousAnalyses = true
+                appState.navigateTo(.previousAnalyses)
                 LiquidGlassHaptics.impact(.medium)
             }) {
                 HStack {
@@ -251,7 +168,7 @@ struct HomeView: View {
             
             // Button 4: TMP Video Analysis Demo
             Button(action: {
-                showCoachingVideo = true
+                // showCoachingVideo = true
                 LiquidGlassHaptics.impact(.medium)
             }) {
                 HStack {

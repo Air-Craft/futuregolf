@@ -4,10 +4,8 @@ import Factory
 
 struct RecordingScreen: View {
     @StateObject private var viewModel = Container.shared.recordingViewModel()
-    @InjectedObject(\.appState) private var appState
-    @Environment(\.dismiss) private var dismiss
+    @InjectedObservable(\.appState) private var appState: AppState
     @State private var showCancelConfirmation = false
-    @State private var shouldNavigateToAnalysis = false
     @State private var deviceOrientation = UIDevice.current.orientation
     @State private var currentZoom: CGFloat = 1.0
     @State private var showZoomIndicator = false
@@ -87,9 +85,6 @@ struct RecordingScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             deviceOrientation = UIDevice.current.orientation
         }
-        .onChange(of: viewModel.currentPhase, handlePhaseChange)
-        .onChange(of: appState.currentRecordingId, handleCurrentRecordingIdChanged)
-        .navigationDestination(isPresented: $shouldNavigateToAnalysis, destination: analysisDestination)
         .confirmationDialog("Cancel Recording", isPresented: $showCancelConfirmation, actions: cancelConfirmationActions, message: cancelConfirmationMessage)
         .alert("Recording Error", isPresented: .constant(viewModel.currentPhase == .error), actions: errorAlertActions, message: errorAlertMessage)
         .accessibilityIdentifier("RecordingScreen")
@@ -122,25 +117,13 @@ struct RecordingScreen: View {
         }
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
     }
-    
-    private func handlePhaseChange(oldValue: RecordingPhase, newValue: RecordingPhase) {
-        if newValue == .processing && appState.currentRecordingId != nil {
-            shouldNavigateToAnalysis = true
-        }
-    }
-    
-    private func handleCurrentRecordingIdChanged(oldValue: String?, newValue: String?) {
-        if let id = newValue, viewModel.currentPhase == .processing {
-            shouldNavigateToAnalysis = true
-        }
-    }
-    
+        
     private func handleCancel() {
         if viewModel.currentPhase == .recording {
             viewModel.ttsService.pauseSpeaking()
             showCancelConfirmation = true
         } else {
-            dismiss()
+            appState.popToRoot()
         }
     }
     
@@ -157,13 +140,9 @@ struct RecordingScreen: View {
         }
     }
     
-    private func analysisDestination() -> some View {
-        SwingAnalysisView()
-    }
-    
     @ViewBuilder
     private func cancelConfirmationActions() -> some View {
-        Button("Cancel Recording", role: .destructive) { dismiss() }
+        Button("Cancel Recording", role: .destructive) { appState.popToRoot() }
         Button("Continue Recording", role: .cancel) {}
     }
     
@@ -187,7 +166,7 @@ struct RecordingScreen: View {
                     await setupScreen()
                 }
             }
-            Button("Cancel", role: .cancel) { dismiss() }
+            Button("Cancel", role: .cancel) { appState.popToRoot() }
         }
     }
     

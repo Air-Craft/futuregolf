@@ -176,7 +176,7 @@ GEMINI_API_KEY=...
 
 ### Architecture
 - **Backend**: FastAPI + PostgreSQL + OpenAI TTS + Google Gemini
-- **iOS App**: Swift + Liquid Glass Framework + Custom TTS Widget
+- **iOS App**: Swift + Liquid Glass Framework + Custom TTS Widget. The app now uses a full-screen `NavigationStack` for all navigation, driven by an `AppState` object to manage the navigation path. This replaces all previous modal (`.sheet` or `.fullScreenCover`) presentations.
 - **Database**: Neon PostgreSQL with JSONB analysis storage
 - **AI**: Google Gemini (video analysis) + OpenAI (TTS) + MediaPipe (pose detection)
 - **Storage**: Google Cloud Storage for video files

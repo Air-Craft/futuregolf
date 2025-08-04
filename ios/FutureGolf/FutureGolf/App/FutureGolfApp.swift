@@ -1,14 +1,3 @@
-//
-//  FutureGolfApp.swift
-//  FutureGolf
-//
-//  Created by Greg Plumbly on 25/07/2025.
-//
-
-import SwiftUI
-import os.log
-import AVFoundation
-
 import SwiftUI
 import os.log
 import AVFoundation
@@ -18,6 +7,10 @@ import Factory
 struct FutureGolfApp: App {
     // Debug flag for direct recording screen launch
     private let debugLaunchRecording = ProcessInfo.processInfo.environment["DEBUG_LAUNCH_RECORDING"] == "1"
+    
+    
+    @Injected(\.appState) private var appState
+    
     @Injected(\.debugService) private var debugService
     @Injected(\.toastManager) private var toastManager
     @Injected(\.connectivityService) private var connectivityService
@@ -30,36 +23,32 @@ struct FutureGolfApp: App {
     
     var body: some Scene {
         WindowGroup {
-//            if TestConfiguration.shared.shouldShowSwingAnalysisDirectly {
-//                // For UI testing - go directly to SwingAnalysisView
-//                SwingAnalysisView(
-//                    videoURL: getTestVideoURL(),
-//                    analysisId: "test-analysis-001"
-//                )
-//                .withToastOverlay()
-//                .onAppear {
-//                    setupTestEnvironment()
-//                }
-//            } else
-            if debugLaunchRecording {
-                // Launch directly into recording screen for testing
-                NavigationStack {
-                    DebugRecordingLauncher()
-                }
-                .withToastOverlay()
-            } else {
-                // Normal app flow
+            NavigationStack(path: Binding(
+                get: { appState.path },
+                set: { appState.path = $0 }
+            )) {
                 HomeView()
-                    .withToastOverlay()
-                    .onAppear {
-                        // Perform debug operations if configured
-                        Task {
-                            await debugService.performDebugLaunchOperations()
+                    .navigationDestination(for: NavigationRoute.self) { route in
+                        switch route {
+                        case .recording:
+                            RecordingScreen().task { print("🚀 Navigating to recording screen") }
+                        case .swingAnalysis(let videoURL, let analysisId):
+                            SwingAnalysisView(videoURL: videoURL, analysisId: analysisId).task { print("🚀 Navigating to analysis screen") }
+                        case .previousAnalyses:
+                            PreviousAnalysesView().task { print("🚀 Navigating to PreviousAnalysesScreen") }
+                            
                         }
-                        
-                        // Perform app initialization tasks
-                        performAppInitialization()
                     }
+            }
+            .withToastOverlay()
+            .onAppear {
+                // Perform debug operations if configured
+                Task {
+                    await debugService.performDebugLaunchOperations()
+                }
+                
+                // Perform app initialization tasks
+                performAppInitialization()
             }
         }
     }
