@@ -6,8 +6,6 @@ import Combine
 
 @MainActor
 class AudioRouteManager: ObservableObject {
-    static let shared = AudioRouteManager()
-    
     @Published var currentRoute: String = "Unknown"
     @Published var isHeadphonesConnected: Bool = false
     

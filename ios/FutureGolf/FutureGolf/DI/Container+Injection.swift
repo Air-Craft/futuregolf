@@ -3,74 +3,74 @@ import Factory
 
 extension Container {
     // MARK: - App State
-    var appState: Factory<AppState> {
-        self { AppState() }.singleton
+    @MainActor var appState: Factory<AppState> {
+        self { @MainActor in AppState() }.singleton
     }
 
     // MARK: - ViewModels
-    var swingAnalysisViewModel: Factory<SwingAnalysisViewModel> {
-        self { SwingAnalysisViewModel() }
+    @MainActor var swingAnalysisViewModel: Factory<SwingAnalysisViewModel> {
+        self { @MainActor in SwingAnalysisViewModel() }
     }
     
-    var recordingViewModel: Factory<RecordingViewModel> {
-        self { RecordingViewModel() }
+    @MainActor var recordingViewModel: Factory<RecordingViewModel> {
+        self { @MainActor in RecordingViewModel() }
     }
     
-    var videoAnalysisViewModel: Factory<VideoAnalysisViewModel> {
-        self { VideoAnalysisViewModel() }
+    @MainActor var videoAnalysisViewModel: Factory<VideoAnalysisViewModel> {
+        self { @MainActor in VideoAnalysisViewModel() }
     }
 
     // MARK: - Services
-    var analysisService: Factory<AnalysisService> {
-        self { AnalysisService() }
+    @MainActor var analysisService: Factory<AnalysisService> {
+        self { @MainActor in AnalysisService() }
     }
 
-    var videoProcessingService: Factory<VideoProcessingService> {
-        self { VideoProcessingService() }.cached
+    @MainActor var videoProcessingService: Factory<VideoProcessingService> {
+        self { @MainActor in VideoProcessingService() }.cached
     }
 
-    var analysisStorageManager: Factory<AnalysisStorageManager> {
+    @MainActor var analysisStorageManager: Factory<AnalysisStorageManager> {
         self { AnalysisStorageManager() }.cached
     }
     
     var connectivityService: Factory<ConnectivityService> {
-        self { ConnectivityService.shared }.singleton
+        self { ConnectivityService() }.singleton
     }
     
     var ttsService: Factory<TTSService> {
         self { TTSService.shared }.singleton
     }
     
-    var audioRouteManager: Factory<AudioRouteManager> {
-        self { AudioRouteManager.shared }.singleton
+    @MainActor var audioRouteManager: Factory<AudioRouteManager> {
+        self { @MainActor in AudioRouteManager() }.singleton
     }
     
-    var thumbnailService: Factory<ThumbnailService> {
-        self { ThumbnailService() }
+    @MainActor var thumbnailService: Factory<ThumbnailService> {
+        self { @MainActor in ThumbnailService() }
     }
     
-    var ttsCacheService: Factory<TTSCacheService> {
-        self { TTSCacheService() }
+    @MainActor var ttsCacheService: Factory<TTSCacheService> {
+        self { @MainActor in TTSCacheService() }
     }
     
-    var reportGenerator: Factory<AnalysisReportGenerator> {
-        self { AnalysisReportGenerator() }
+    @MainActor var reportGenerator: Factory<AnalysisReportGenerator> {
+        self { @MainActor in AnalysisReportGenerator() }
     }
     
     var recordingService: Factory<RecordingService> {
         self { RecordingService() }
     }
     
-    var cameraService: Factory<CameraService> {
-        self { CameraService() }
+    @MainActor var cameraService: Factory<CameraService> {
+        self { @MainActor in CameraService() }
     }
     
-    var voiceCommandService: Factory<VoiceCommandService> {
-        self { VoiceCommandService() }
+    @MainActor var voiceCommandService: Factory<VoiceCommandService> {
+        self { @MainActor in VoiceCommandService() }
     }
     
-    var recordingAPIService: Factory<RecordingAPIService> {
-        self { RecordingAPIService.shared }.singleton
+    @MainActor var recordingAPIService: Factory<RecordingAPIService> {
+        self { @MainActor in RecordingAPIService.shared }.singleton
     }
     
     var apiClient: Factory<APIClient> {

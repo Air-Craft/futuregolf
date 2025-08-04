@@ -33,7 +33,6 @@ struct StoredAnalysis: Codable, Identifiable {
 }
 
 // MARK: - Analysis Storage Manager
-@MainActor
 class AnalysisStorageManager: ObservableObject {
     @Published var storedAnalyses: [StoredAnalysis] = []
     

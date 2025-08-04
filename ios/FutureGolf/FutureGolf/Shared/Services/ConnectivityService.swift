@@ -5,11 +5,7 @@ import UIKit
 
 // MARK: - Connectivity Service
 
-@MainActor
 class ConnectivityService: ObservableObject {
-    // Temporary singleton for TTSService compatibility
-    static let shared = ConnectivityService()
-    
     // Published properties for UI binding
     @Published var isConnected: Bool = false // Combined network + server connectivity
     @Published var connectionType: NWInterface.InterfaceType?
@@ -232,11 +228,15 @@ class ConnectivityService: ObservableObject {
             if wasConnected && !isConnected {
                 // Lost connectivity
                 print("🌐 Connectivity lost")
-                showConnectivityToast(connected: false)
+                Task { @MainActor in
+                    showConnectivityToast(connected: false)
+                }
             } else if !wasConnected && isConnected {
                 // Gained connectivity
                 print("🌐 Connectivity restored")
-                showConnectivityToast(connected: true)
+                Task { @MainActor in
+                    showConnectivityToast(connected: true)
+                }
                 onConnectivityRestored()
             }
         }
@@ -246,8 +246,9 @@ class ConnectivityService: ObservableObject {
             print("🌐 Server reachable: \(isServerReachable)")
         }
     }
-    
+    @MainActor
     private func showConnectivityToast(connected: Bool) {
+        
         if connected {
             // Clear any existing connectivity warning
             ToastManager.shared.dismiss(id: "connectivity")
