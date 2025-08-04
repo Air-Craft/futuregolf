@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import Factory
 
 /// Configuration for UI testing with mock data
 struct TestConfiguration {
@@ -110,6 +111,7 @@ class MockConnectivityService: ObservableObject {
     static let shared = MockConnectivityService()
     
     @Published var isConnected: Bool
+    @Injected(\.toastManager) private var toastManager
     
     private init() {
         let config = TestConfiguration.shared
@@ -120,19 +122,19 @@ class MockConnectivityService: ObservableObject {
             Task {
                 try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
                 self.isConnected = true
-                ToastManager.shared.show("Connected", type: .success, duration: 2.0)
+                self.toastManager.show("Connected", type: .success, duration: 2.0)
             }
         }
     }
     
     func simulateConnectionLoss() {
         isConnected = false
-        ToastManager.shared.show("Waiting for connectivity...", type: .warning, duration: .infinity, id: "connectivity")
+        toastManager.show("Waiting for connectivity...", type: .warning, duration: .infinity, id: "connectivity")
     }
     
     func simulateConnectionRestored() {
         isConnected = true
-        ToastManager.shared.dismiss(id: "connectivity")
-        ToastManager.shared.show("Connected", type: .success, duration: 2.0)
+        toastManager.dismiss(id: "connectivity")
+        toastManager.show("Connected", type: .success, duration: 2.0)
     }
 }

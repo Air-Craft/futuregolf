@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Combine
+import Factory
 
 /// Manages TTS audio caching for instant playback
 class TTSCacheManager: ObservableObject {
@@ -15,6 +16,9 @@ class TTSCacheManager: ObservableObject {
     
     @Published var isCacheWarming = false
     @Published var cacheWarmingProgress: Double = 0.0
+    
+    @Injected(\.connectivityService) private var connectivityService
+    @Injected(\.toastManager) private var toastManager
     
     private var connectivityCallbackId: UUID?
     private var progressToastId: String?
@@ -36,8 +40,9 @@ class TTSCacheManager: ObservableObject {
     
     deinit {
         if let id = connectivityCallbackId {
+            let service = connectivityService
             Task { @MainActor in
-                ConnectivityService.shared.removeCallback(id)
+                service.removeCallback(id)
             }
         }
     }
@@ -50,7 +55,7 @@ class TTSCacheManager: ObservableObject {
             print("🗣️💾 TTS Cache: Starting cache warm-up process...")
             
             // Check connectivity first
-            guard ConnectivityService.shared.isConnected else {
+            guard connectivityService.isConnected else {
                 print("🗣️💾 TTS Cache: No network connection available, postponing cache warm-up")
                 
                 // Register for connectivity restoration if cache needs refresh
@@ -224,7 +229,7 @@ class TTSCacheManager: ObservableObject {
     private func setupConnectivityMonitoring() {
         Task { @MainActor in
             // Register for connectivity restoration
-            connectivityCallbackId = ConnectivityService.shared.onConnectivityRestored { [weak self] in
+            connectivityCallbackId = connectivityService.onConnectivityRestored { [weak self] in
                 guard let self = self else { return }
                 
                 // Check if we have pending cache warming
@@ -244,14 +249,14 @@ class TTSCacheManager: ObservableObject {
         }
         
         Task { @MainActor in
-            connectivityCallbackId = ConnectivityService.shared.onConnectivityRestored { [weak self] in
+            connectivityCallbackId = connectivityService.onConnectivityRestored { [weak self] in
                 guard let self = self else { return }
                 
                 print("🗣️💾 TTS Cache: Connectivity restored callback triggered")
                 
                 // Remove the callback after it's used
                 if let id = self.connectivityCallbackId {
-                    ConnectivityService.shared.removeCallback(id)
+                    self.connectivityService.removeCallback(id)
                     self.connectivityCallbackId = nil
                 }
                 
@@ -289,7 +294,7 @@ class TTSCacheManager: ObservableObject {
                 
                 #if DEBUG
                 // Show progress toast
-                progressToastId = ToastManager.shared.showProgress("Caching TTS...", progress: 0.0)
+                progressToastId = toastManager.showProgress("Caching TTS...", progress: 0.0)
                 #endif
             }
             
@@ -363,7 +368,7 @@ class TTSCacheManager: ObservableObject {
                         #if DEBUG
                         // Update progress toast
                         if let toastId = progressToastId {
-                            ToastManager.shared.updateProgress(
+                            toastManager.updateProgress(
                                 id: toastId, 
                                 progress: currentProgress,
                                 label: "Caching TTS... (\(currentSuccessCount)/\(totalPhraseCount))"
@@ -394,15 +399,15 @@ class TTSCacheManager: ObservableObject {
                     #if DEBUG
                     // Dismiss progress toast and show result
                     if let toastId = progressToastId {
-                        ToastManager.shared.dismissProgress(id: toastId)
+                        toastManager.dismissProgress(id: toastId)
                         progressToastId = nil
                         
                         if finalSuccessCount == totalPhrases {
-                            ToastManager.shared.show("TTS cache ready!", type: .success)
+                            toastManager.show("TTS cache ready!", type: .success)
                         } else if finalSuccessCount > 0 {
-                            ToastManager.shared.show("TTS cache partially ready (\(finalSuccessCount)/\(totalPhrases))", type: .warning)
+                            toastManager.show("TTS cache partially ready (\(finalSuccessCount)/\(totalPhrases))", type: .warning)
                         } else {
-                            ToastManager.shared.show("TTS cache failed", type: .error)
+                            toastManager.show("TTS cache failed", type: .error)
                         }
                     }
                     #endif

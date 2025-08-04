@@ -1,11 +1,13 @@
 import Foundation
 import UIKit
+import Factory
 
 @MainActor
 class AnalysisReportGenerator {
-    private let mediaStorage = AnalysisMediaStorage.shared
+    @Injected(\.ttsService) private var ttsService
 
     func generateReport(for analysisId: String, videoURL: URL, result: AnalysisResult, thumbnail: UIImage?) async throws -> AnalysisReport {
+        let mediaStorage = AnalysisMediaStorage.shared
         let newAnalysisId = try await mediaStorage.createAnalysisSession(videoURL: videoURL)
         
         if let thumb = thumbnail {
@@ -32,7 +34,7 @@ class AnalysisReportGenerator {
         let coachingLines = parseCoachingScript(result.coachingScript)
         var coachingLineReports: [CoachingLineReport] = []
         for (index, line) in coachingLines.enumerated() {
-            if let audioData = await TTSService.shared.cacheManager.getCachedAudio(for: line.text) {
+            if let audioData = await ttsService.cacheManager.getCachedAudio(for: line.text) {
                 let ttsPath = try await mediaStorage.saveTTSAudio(
                     analysisId: newAnalysisId,
                     lineIndex: index,

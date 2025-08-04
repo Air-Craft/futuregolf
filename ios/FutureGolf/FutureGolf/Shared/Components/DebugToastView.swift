@@ -1,8 +1,10 @@
 import SwiftUI
+import Factory
 
 struct DebugToastView: View {
     @State private var progressToastId: String?
     @State private var progress: Double = 0.0
+    @Injected(\.toastManager) private var toastManager
     
     var body: some View {
         VStack(spacing: 20) {
@@ -16,19 +18,19 @@ struct DebugToastView: View {
                     .font(.headline)
                 
                 Button("Show Info Toast") {
-                    ToastManager.shared.show("This is an info message", type: .info)
+                    toastManager.show("This is an info message", type: .info)
                 }
                 
                 Button("Show Success Toast") {
-                    ToastManager.shared.show("Operation successful!", type: .success)
+                    toastManager.show("Operation successful!", type: .success)
                 }
                 
                 Button("Show Warning Toast") {
-                    ToastManager.shared.show("Please be careful", type: .warning)
+                    toastManager.show("Please be careful", type: .warning)
                 }
                 
                 Button("Show Error Toast") {
-                    ToastManager.shared.show("Something went wrong", type: .error)
+                    toastManager.show("Something went wrong", type: .error)
                 }
             }
             .buttonStyle(.bordered)
@@ -42,7 +44,7 @@ struct DebugToastView: View {
                 
                 Button("Start Progress") {
                     progress = 0.0
-                    progressToastId = ToastManager.shared.showProgress("Caching TTS...", progress: 0.0)
+                    progressToastId = toastManager.showProgress("Caching TTS...", progress: 0.0)
                     
                     // Simulate progress
                     Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
@@ -52,15 +54,15 @@ struct DebugToastView: View {
                             if progress >= 1.0 {
                                 timer.invalidate()
                                 if let id = progressToastId {
-                                    ToastManager.shared.dismissProgress(id: id)
-                                    ToastManager.shared.show("TTS cache ready!", type: .success)
+                                    toastManager.dismissProgress(id: id)
+                                    toastManager.show("TTS cache ready!", type: .success)
                                     progressToastId = nil
                                 }
                             } else {
                                 if let id = progressToastId {
                                     let phraseCount = 6
                                     let completed = Int(progress * Double(phraseCount))
-                                    ToastManager.shared.updateProgress(
+                                    toastManager.updateProgress(
                                         id: id,
                                         progress: progress,
                                         label: "Caching TTS... (\(completed)/\(phraseCount))"
@@ -74,7 +76,7 @@ struct DebugToastView: View {
                 
                 Button("Cancel Progress") {
                     if let id = progressToastId {
-                        ToastManager.shared.dismissProgress(id: id)
+                        toastManager.dismissProgress(id: id)
                         progressToastId = nil
                     }
                 }

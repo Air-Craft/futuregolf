@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import Factory
 
 // MARK: - Toast Model
 
@@ -60,15 +61,13 @@ struct Toast: Identifiable {
 
 @MainActor
 class ToastManager: ObservableObject {
-    static let shared = ToastManager()
-    
     @Published var activeToasts: [Toast] = []
     @Published var toastQueue: [Toast] = []
     
     private var dismissTasks: [String: Task<Void, Never>] = [:]
     private var progressToasts: [String: Toast] = [:]
     
-    private init() {}
+    init() {}
     
     // MARK: - Public Methods
     
@@ -266,7 +265,7 @@ struct ToastView: View {
 // MARK: - Toast Overlay View Modifier
 
 struct ToastOverlay: ViewModifier {
-    @ObservedObject private var toastManager = ToastManager.shared
+    @InjectedObject(\.toastManager) private var toastManager
     @State private var dragOffsets: [String: CGFloat] = [:]
     
     func body(content: Content) -> some View {

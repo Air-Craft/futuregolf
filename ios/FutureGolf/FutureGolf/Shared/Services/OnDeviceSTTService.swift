@@ -2,10 +2,9 @@ import Foundation
 import Speech
 import AVFoundation
 import Combine
+import Factory
 
 class OnDeviceSTTService: NSObject, ObservableObject {
-    static let shared = OnDeviceSTTService()
-    
     // MARK: - Published Properties
     @Published var isListening = false
     @Published var isAvailable = false
@@ -42,13 +41,13 @@ class OnDeviceSTTService: NSObject, ObservableObject {
         "that is enough"
     ]
     
-    private override init() {
+    override init() {
         // Initialize with user's preferred language, fallback to English
         self.speechRecognizer = SFSpeechRecognizer(locale: Locale.current) ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
         super.init()
         
         Task { @MainActor in
-            self.audioRouteManager = AudioRouteManager.shared
+            self.audioRouteManager = Container.shared.audioRouteManager()
         }
         
         setupAvailability()

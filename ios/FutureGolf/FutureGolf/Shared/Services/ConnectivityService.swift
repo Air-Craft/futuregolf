@@ -2,6 +2,7 @@ import Foundation
 import Network
 import Combine
 import UIKit
+import Factory
 
 // MARK: - Connectivity Service
 
@@ -9,6 +10,8 @@ class ConnectivityService: ObservableObject {
     // Published properties for UI binding
     @Published var isConnected: Bool = false // Combined network + server connectivity
     @Published var connectionType: NWInterface.InterfaceType?
+    
+    @Injected(\.toastManager) private var toastManager
     
     // Server connectivity tracking
     private(set) var lastConnectivityCheck: Date = .distantPast
@@ -251,12 +254,12 @@ class ConnectivityService: ObservableObject {
         
         if connected {
             // Clear any existing connectivity warning
-            ToastManager.shared.dismiss(id: "connectivity")
+            toastManager.dismiss(id: "connectivity")
             // Show success briefly
-            ToastManager.shared.show("Connected", type: .success, duration: 2.0)
+            toastManager.show("Connected", type: .success, duration: 2.0)
         } else {
             // Show persistent warning
-            ToastManager.shared.show("Waiting for connectivity...", 
+            toastManager.show("Waiting for connectivity...", 
                                    type: .warning, 
                                    duration: .infinity, 
                                    id: "connectivity")
@@ -271,9 +274,6 @@ class ConnectivityService: ObservableObject {
         
         // Resume pending operations
         Task {
-            // 1. Warm TTS cache
-            TTSService.shared.cacheManager.warmCache()
-            
             // 2. Resume any pending swing analyses
             // This will be handled by SwingAnalysisViewModel subscribers
         }

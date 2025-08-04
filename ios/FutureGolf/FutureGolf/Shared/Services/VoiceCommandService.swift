@@ -1,9 +1,10 @@
 import Foundation
 import Combine
+import Factory
 
 @MainActor
 class VoiceCommandService {
-    private let onDeviceSTT = OnDeviceSTTService.shared
+    @Injected(\.onDeviceSTTService) private var onDeviceSTT
     private var voiceCommandCancellable: AnyCancellable?
     var onCommand: ((VoiceCommand) -> Void)?
 

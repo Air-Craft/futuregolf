@@ -38,7 +38,7 @@ extension Container {
     }
     
     var ttsService: Factory<TTSService> {
-        self { TTSService.shared }.singleton
+        self { TTSService() }.singleton
     }
     
     @MainActor var audioRouteManager: Factory<AudioRouteManager> {
@@ -70,10 +70,22 @@ extension Container {
     }
     
     @MainActor var recordingAPIService: Factory<RecordingAPIService> {
-        self { @MainActor in RecordingAPIService.shared }.singleton
+        self { @MainActor in RecordingAPIService() }.singleton
     }
     
     var apiClient: Factory<APIClient> {
         self { APIClient() }
+    }
+    
+    @MainActor var debugService: Factory<DebugService> {
+        self { @MainActor in DebugService() }.singleton
+    }
+    
+    var onDeviceSTTService: Factory<OnDeviceSTTService> {
+        self { OnDeviceSTTService() }.singleton
+    }
+    
+    @MainActor var toastManager: Factory<ToastManager> {
+        self { @MainActor in ToastManager() }.singleton
     }
 }

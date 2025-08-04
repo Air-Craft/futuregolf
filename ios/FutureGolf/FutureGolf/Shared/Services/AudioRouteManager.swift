@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Combine
+import Factory
 
 // MARK: - Audio Route Manager
 
@@ -9,11 +10,13 @@ class AudioRouteManager: ObservableObject {
     @Published var currentRoute: String = "Unknown"
     @Published var isHeadphonesConnected: Bool = false
     
+    @Injected(\.toastManager) private var toastManager
+    
     private var routeChangeObserver: NSObjectProtocol?
     private var lastConfiguredForHeadphones: Bool?
     private var lastConfigurationTime: Date = .distantPast
     
-    private init() {
+    init() {
         setupRouteChangeNotification()
         updateCurrentRoute()
     }
@@ -116,7 +119,7 @@ class AudioRouteManager: ObservableObject {
         
         // Show debug toast in debug builds
         #if DEBUG
-        ToastManager.shared.show("Audio: \(routeDescription)", type: .info, duration: 2.0)
+        toastManager.show("Audio: \(routeDescription)", type: .info, duration: 2.0)
         #endif
     }
     

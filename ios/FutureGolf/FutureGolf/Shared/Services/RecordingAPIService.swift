@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import Combine
+import Factory
 
 // MARK: - API Models
 
@@ -13,8 +14,6 @@ import Combine
 @MainActor
 class RecordingAPIService: ObservableObject {
     
-    static let shared = RecordingAPIService()
-    
     private let baseURL: String
     private let session: URLSession
     // WebSocket removed - voice processing now handled on-device
@@ -23,7 +22,7 @@ class RecordingAPIService: ObservableObject {
     @Published var isConnected = false
     private var currentSessionId: String?
     
-    private init() {
+    init() {
         // Get base URL from centralized config
         self.baseURL = Config.apiBaseURL
         

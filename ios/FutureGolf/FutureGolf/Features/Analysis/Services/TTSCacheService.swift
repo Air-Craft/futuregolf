@@ -1,10 +1,13 @@
 import Foundation
 import Combine
+import Factory
 
 @MainActor
 class TTSCacheService: ObservableObject {
     @Published var isReady = false
     @Published var progress: Double = 0.0
+    
+    @Injected(\.ttsService) private var ttsService
     
     private var ttsCacheCheckTimer: Timer?
     private var analysisResult: AnalysisResult?
@@ -20,7 +23,7 @@ class TTSCacheService: ObservableObject {
         
         // Start caching analysis phrases in background
         Task {
-            TTSService.shared.cacheManager.warmCache()
+            ttsService.cacheManager.warmCache()
         }
         
         // Check immediately
@@ -49,7 +52,7 @@ class TTSCacheService: ObservableObject {
         
         var cachedCount = 0
         for phrase in phrases {
-            if await TTSService.shared.cacheManager.getCachedAudio(for: phrase) != nil {
+            if await ttsService.cacheManager.getCachedAudio(for: phrase) != nil {
                 cachedCount += 1
             }
         }

@@ -1,10 +1,9 @@
 import Foundation
 import AVFoundation
 import Combine
+import Factory
 
 class TTSService: NSObject, ObservableObject {
-    static let shared = TTSService()
-    
     private let serverURL = Config.apiBaseURL
     private var audioPlayer: AVAudioPlayer?
     private var audioPlayerDelegate: AudioPlayerDelegate?
@@ -17,16 +16,32 @@ class TTSService: NSObject, ObservableObject {
     let cacheManager = TTSCacheManager()
     private var audioRouteManager: AudioRouteManager?
     
+    // Connectivity
+    @Injected(\.connectivityService) private var connectivityService
+    private var cancellables = Set<AnyCancellable>()
+    
     // Fallback iOS TTS
     private let speechSynthesizer = AVSpeechSynthesizer()
     private var currentSpeechCompletion: ((Bool) -> Void)?
     
-    private override init() {
+    override init() {
         super.init()
         Task { @MainActor in
-            self.audioRouteManager = AudioRouteManager.shared
+            self.audioRouteManager = Container.shared.audioRouteManager()
             self.configureAudioSession()
         }
+        
+        connectivityService.$isConnected
+            .sink { [weak self] isConnected in
+                if isConnected {
+                    print("🗣️ TTS detected connectivity, warming cache.")
+                    self?.cacheManager.warmCache()
+                } else {
+                    print("🗣️ TTS detected disconnect, stopping playback.")
+                    self?.stopSpeaking()
+                }
+            }
+            .store(in: &cancellables)
     }
     
     @MainActor

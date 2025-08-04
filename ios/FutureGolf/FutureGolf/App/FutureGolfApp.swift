@@ -18,6 +18,8 @@ import Factory
 struct FutureGolfApp: App {
     // Debug flag for direct recording screen launch
     private let debugLaunchRecording = ProcessInfo.processInfo.environment["DEBUG_LAUNCH_RECORDING"] == "1"
+    @Injected(\.debugService) private var debugService
+    @Injected(\.toastManager) private var toastManager
     
     init() {
         // Test server connectivity at launch
@@ -49,7 +51,7 @@ struct FutureGolfApp: App {
                     .onAppear {
                         // Perform debug operations if configured
                         Task {
-                            await DebugService.shared.performDebugLaunchOperations()
+                            await debugService.performDebugLaunchOperations()
                         }
                         
                         // Perform app initialization tasks
@@ -131,13 +133,14 @@ struct FutureGolfApp: App {
         
         // Show connectivity status on launch if not connected
         if !isConnected {
-            ToastManager.shared.show("Waiting for connectivity...", 
+            toastManager.show("Waiting for connectivity...", 
                                    type: .warning, 
                                    duration: .infinity, 
                                    id: "connectivity")
         }
         
-        let cacheManager = TTSService.shared.cacheManager
+        let ttsService = Container.shared.ttsService()
+        let cacheManager = ttsService.cacheManager
         
         // Check current cache status
         let status = cacheManager.getCacheStatus()
@@ -446,7 +449,7 @@ struct DebugRecordingLauncher: View {
     
     private func testAPIConnectivity() async -> String {
         do {
-            let apiService = RecordingAPIService.shared
+            let apiService = Container.shared.recordingAPIService()
             let isHealthy = await apiService.checkServiceHealth()
             
             if isHealthy {

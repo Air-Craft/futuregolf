@@ -5,11 +5,10 @@ import Factory
 /// Service responsible for debug operations like clearing data
 @MainActor
 class DebugService {
-    static let shared = DebugService()
-    
     private let logger = Logger(subsystem: "com.plumbly.FutureGolf", category: "DebugService")
+    @Injected(\.toastManager) private var toastManager
     
-    private init() {}
+    init() {}
     
     /// Delete all swing entries (videos and analysis data)
     func deleteAllSwingEntries(analysisStorage: AnalysisStorageManager, videoProcessing: VideoProcessingService) async {
@@ -62,7 +61,7 @@ class DebugService {
             """)
         
         // Show toast notification
-        ToastManager.shared.show(
+        toastManager.show(
             "Debug: Deleted \(deletedAnalyses) analyses and \(deletedVideos) videos",
             type: .success,
             duration: 3.0

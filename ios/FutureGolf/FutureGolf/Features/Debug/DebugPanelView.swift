@@ -1,4 +1,5 @@
 import SwiftUI
+import Factory
 
 struct DebugPanelView: View {
     @Environment(\.dismiss) private var dismiss
@@ -6,6 +7,9 @@ struct DebugPanelView: View {
     @State private var cacheWarmedSuccessfully = false
     @State private var serverTestResult = ""
     @State private var isTesting = false
+    
+    @Injected(\.ttsService) private var ttsService
+    @Injected(\.onDeviceSTTService) private var onDeviceSTTService
     
     var body: some View {
         NavigationStack {
@@ -169,7 +173,7 @@ struct DebugPanelView: View {
     
     private func warmTTSCache() {
         print("🐛 DEBUG: Warming TTS cache...")
-        TTSService.shared.cacheManager.warmCache()
+        ttsService.cacheManager.warmCache()
         cacheWarmedSuccessfully = true
         
         // Reset after delay
@@ -180,12 +184,12 @@ struct DebugPanelView: View {
     
     private func listCacheContents() {
         print("🐛 DEBUG: Listing cache contents...")
-        TTSService.shared.cacheManager.debugListCachedFiles()
+        ttsService.cacheManager.debugListCachedFiles()
     }
     
     private func clearCache() {
         print("🐛 DEBUG: Clearing TTS cache...")
-        TTSService.shared.cacheManager.clearCache()
+        ttsService.cacheManager.clearCache()
     }
     
     private func testServerConnection() {
@@ -254,14 +258,14 @@ struct DebugPanelView: View {
     private func testOnDeviceSTT() {
         print("🐛 DEBUG: Testing on-device STT...")
         Task {
-            let hasPermissions = await OnDeviceSTTService.shared.requestPermissions()
+            let hasPermissions = await onDeviceSTTService.requestPermissions()
             if hasPermissions {
-                OnDeviceSTTService.shared.startListening()
+                onDeviceSTTService.startListening()
                 print("🐛 DEBUG: STT started - say 'begin' or 'stop'")
                 
                 // Stop after 5 seconds
                 DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                    OnDeviceSTTService.shared.stopListening()
+                    onDeviceSTTService.stopListening()
                     print("🐛 DEBUG: STT stopped")
                 }
             } else {
