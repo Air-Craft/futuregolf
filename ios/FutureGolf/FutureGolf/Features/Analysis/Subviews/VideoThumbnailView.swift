@@ -49,6 +49,6 @@ struct VideoThumbnailView: View {
         .padding(.horizontal)
         .accessibilityLabel("Play swing analysis video")
         .accessibilityHint("Double tap to watch your swing with coaching overlay")
-        .accessibilityIdentifier("VideoThumbnail")
+        .accessibilityIdentifier("playVideoButton")
     }
 }

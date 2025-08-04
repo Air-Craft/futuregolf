@@ -23,22 +23,7 @@ struct FutureGolfApp: App {
     
     var body: some Scene {
         WindowGroup {
-            if TestConfiguration.shared.shouldShowSwingAnalysisDirectly {
-                // For UI testing - go directly to SwingAnalysisView
-                SwingAnalysisView(
-                    videoURL: getTestVideoURL(),
-                    analysisId: "test-analysis-001",
-                    dependencies: deps
-                )
-                .withToastOverlay()
-                .onAppear {
-                    setupTestEnvironment()
-                }
-                .environmentObject(deps)
-                .environmentObject(deps.analysisStorage)
-                .environmentObject(deps.videoProcessing)
-                .environmentObject(deps.connectivity)
-            } else if debugLaunchRecording {
+            if debugLaunchRecording {
                 // Launch directly into recording screen for testing
                 NavigationStack {
                     DebugRecordingLauncher()
@@ -270,24 +255,6 @@ struct FutureGolfApp: App {
         return nil
     }
     
-    private func setupTestEnvironment() {
-        let config = TestConfiguration.shared
-        
-        // Set up mock view model state based on test mode
-        Task { @MainActor in
-            if config.analysisMode == .completed {
-                // Load mock analysis result
-                let mockResult = config.createMockAnalysisResult()
-                // Would set on view model if we had access
-            }
-            
-            // Inject mock connectivity if needed
-            if config.isUITesting && config.connectivityState == .offline {
-                // Would need to handle mock connectivity differently with DI
-                print("🎬 Mock connectivity state: offline")
-            }
-        }
-    }
 }
 
 // Debug wrapper for recording screen with enhanced error reporting

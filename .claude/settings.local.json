@@ -70,5 +70,6 @@
   "enabledMcpjsonServers": [
     "neon",
     "ios-simulator"
-  ]
+  ],
+  "enableAllProjectMcpServers": false
 }

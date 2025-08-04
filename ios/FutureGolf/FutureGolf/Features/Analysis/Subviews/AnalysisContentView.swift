@@ -14,6 +14,7 @@ struct AnalysisContentView: View {
             }
             .padding(.bottom, 40)
         }
+        .accessibilityIdentifier("analysisContentScrollView")
     }
 }
 

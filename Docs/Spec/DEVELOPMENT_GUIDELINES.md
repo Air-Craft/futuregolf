@@ -5,6 +5,10 @@
 ### 💡 Core Principles
 - **Use Modern Swift**: Always target the latest stable Swift and iOS versions supported by the project. Leverage modern features like `ResultBuilders`, `async/await`, `some View`, and `macros` if available.
 - **Follow MVVM Strictly**: Keep all logic in the ViewModel (`VM`). Views (`V`) must only describe layout and user interaction. Avoid business logic or navigation logic in Views.
+- **Follow SRP, DRY, separation of interests and other OOP core principles.**
+- **Check your work**: Does the server still start? Does the app build? etc. Also check as per the style guidelines above and below
+- **Commment your work**:  
+- **Break large work into modular chunks** and git commit in between.   
 
 ---
 
@@ -26,39 +30,10 @@
 
 
 #### Global State & DI
-- Use a lightweight **Dependency Injection** system (e.g. environment objects, `@MainActor class AppContainer`) to inject services and global state.
-- Shared state should be managed via a **single source of truth** pattern (e.g. `@Observable`, `@Published`, or modern `ObservableStateObject` pattern).
-- Use @ObservedObject, @StateObject, @EnvironmentObject patterns appropriately where possible.
-- Use `@EnvironmentObject` for global state
+- Use Factory for DI including it's property wrappers.  Its docs are here: https://hmlongco.github.io/Factory/documentation/factorykit/
+- Do not pass dependencies to constructors
+- Assign all deps to class ivars at the top
 
-##### DI Pattern 
-
-````swift
-class AppDependencies: ObservableObject {
-    let authService = AuthService()
-    let settings = SettingsService()
-}
-
-@main
-struct MyApp: App {
-    @StateObject var deps = AppDependencies()
-
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environmentObject(deps.authService)
-                .environmentObject(deps.settings)
-        }
-    }
-}
-````
-
-And now all views downstream can do:
-
-````swift
-@EnvironmentObject var authService: AuthService
-@EnvironmentObject var settings: SettingsService
-````
 
 #### Navigation
 - Use `NavigationStack` and route via a `Router` abstraction controlled by the ViewModel.

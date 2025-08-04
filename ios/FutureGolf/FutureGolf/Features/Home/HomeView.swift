@@ -11,6 +11,8 @@ struct HomeView: View {
     @State private var showDebugPanel = false
     @State private var viewModel = VideoAnalysisViewModel()
     @State private var player: AVPlayer?
+    @State private var showDebugAnalysisView = false
+    @State private var debugVideoURL: URL?
     
     var body: some View {
         ZStack {
@@ -122,6 +124,21 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showDebugPanel) {
                 DebugPanelView()
+            }
+            .sheet(isPresented: $showDebugAnalysisView) {
+                NavigationStack {
+                    SwingAnalysisView(videoURL: debugVideoURL ?? getTestVideoURL(), dependencies: deps)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button("Done") {
+                                    showDebugAnalysisView = false
+                                    debugVideoURL = nil
+                                }
+                            }
+                        }
+                }
+                .accessibilityIdentifier("debugAnalysisResultView")
             }
     }
     
@@ -243,6 +260,29 @@ struct HomeView: View {
                 .padding(.vertical, 16)
             }
             .buttonStyle(LiquidGlassPillButtonStyle())
+            
+            // DEBUG Analysis button (shown during E2E testing or debug mode)
+            if TestConfiguration.shared.isE2ETesting || Config.isDebugPanelEnabled {
+                Button(action: {
+                    debugVideoURL = getTestVideoURL()
+                    showDebugAnalysisView = true
+                    LiquidGlassHaptics.impact(.medium)
+                }) {
+                    HStack {
+                        Image(systemName: "flask.fill")
+                            .font(.title2)
+                        Text("DEBUG Analysis")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                        Spacer()
+                    }
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 16)
+                }
+                .buttonStyle(LiquidGlassPillButtonStyle())
+                .accessibilityIdentifier("debugAnalysisButton")
+            }
         }
     }
     
@@ -268,6 +308,22 @@ struct HomeView: View {
         }
         
         self.player = newPlayer
+    }
+    
+    private func getTestVideoURL() -> URL {
+        // Try to load test video from test bundle
+        if let url = Bundle.main.url(forResource: "test_video", withExtension: "mov", subdirectory: "FutureGolfTestsShared/fixtures") {
+            return url
+        }
+        
+        // Try without subdirectory
+        if let url = Bundle.main.url(forResource: "test_video", withExtension: "mov") {
+            return url
+        }
+        
+        // Fallback to documents directory
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        return documentsPath.appendingPathComponent("test_video.mov")
     }
     
     private func createDemoAnalysisResult() -> AnalysisResult {

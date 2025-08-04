@@ -59,6 +59,7 @@ struct OverviewSectionView: View {
                 .font(.title)
                 .fontWeight(.bold)
                 .foregroundColor(.glassText)
+                .accessibilityIdentifier(title == "Overall Score" ? "overallScoreLabel" : "avgHeadSpeedLabel")
             
             Text(title)
                 .font(.caption)

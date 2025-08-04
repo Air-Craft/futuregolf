@@ -84,9 +84,9 @@ struct TestConfiguration {
         )
     }
     
-    /// Should bypass normal navigation for testing
-    var shouldShowSwingAnalysisDirectly: Bool {
-        return isUITesting && ProcessInfo.processInfo.arguments.contains("--swingAnalysisTest")
+    /// Check if running E2E tests
+    var isE2ETesting: Bool {
+        return isUITesting && ProcessInfo.processInfo.arguments.contains("--swingAnalysisE2ETest")
     }
 }
 

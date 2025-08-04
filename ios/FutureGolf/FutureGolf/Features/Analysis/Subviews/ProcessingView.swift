@@ -12,10 +12,12 @@ struct ProcessingView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(height: 250)
+                        .accessibilityIdentifier("swingAnalysisThumbnail")
                 } else {
                     Rectangle()
                         .fill(Color.gray.opacity(0.3))
                         .frame(height: 250)
+                        .accessibilityIdentifier("swingAnalysisThumbnail")
                 }
                 
                 // Overlay based on analysis state (only show if we have thumbnail or it failed to load)
@@ -29,6 +31,7 @@ struct ProcessingView: View {
                                 .fill(Color.black.opacity(0.6))
                                 .frame(width: 60, height: 60)
                         )
+                        .accessibilityIdentifier("swingAnalysisBusyIndicator")
                 } else if viewModel.analysisResult != nil && viewModel.isAnalysisTTSReady {
                     // Play button when TTS is ready
                     Button(action: {
@@ -58,6 +61,7 @@ struct ProcessingView: View {
                 Text(viewModel.processingStatus)
                     .font(.headline)
                     .foregroundColor(.primary)
+                    .accessibilityIdentifier("swingAnalysisStatusText")
             }
             .padding(.horizontal)
             
@@ -67,6 +71,7 @@ struct ProcessingView: View {
                     .tint(viewModel.isOffline ? .gray : .fairwayGreen)
                     .scaleEffect(y: 2)
                     .animation(.liquidGlassSmooth, value: viewModel.processingProgress)
+                    .accessibilityIdentifier("swingAnalysisProgressBar")
                 
                 Text(viewModel.processingDetail)
                     .font(.caption)
