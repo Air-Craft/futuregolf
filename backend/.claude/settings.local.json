@@ -1,6 +1,9 @@
 {
   "enabledMcpjsonServers": [
     "ios-simulator",
-    "neon"
+    "neon",
+    "context7",
+    "XcodeBuildMCP",
+    "peekaboo"
   ]
 }

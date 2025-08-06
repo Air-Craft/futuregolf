@@ -19,7 +19,7 @@ backend:
 	@echo "🔧 Starting backend on $$(make -s apibase):$${PORT:-8000}..." 
 	@echo "   Be sure to update your Config.swift!"
 	PORT=$${PORT:-8000} && \
-	cd backend && PORT=$$PORT pdm run python start_server.py
+	cd backend && PORT=$$PORT pdm run python -m app.start_server
 
 # Setup development environment
 setup:
@@ -41,7 +41,7 @@ update-reqs:
 # Clean up processes
 clean:
 	@echo "🧹 Cleaning up..."
-	@pkill -f "python start_server.py" || true
+	@pkill -f "python app/start_server.py" || true
 	@echo "✅ Cleanup complete!"
 
 # Run tests
