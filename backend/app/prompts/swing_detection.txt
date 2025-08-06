@@ -1,20 +1,18 @@
-You are analyzing a sequence of images from a golf swing video. Determine if this shows a golf swing.
+You are analyzing a sequence of images from a golf swing video. Determine if this shows a full golf swing.
 
 CRITERIA for detecting a golf swing:
-1. Setup/Address: Player standing over ball, club at rest
-2. Backswing: Club moves back and up to the top
-3. Downswing: Club accelerates down toward ball
-4. Impact: Club contacts ball
-5. Follow-through: Club continues up after impact (SWING IS COMPLETE HERE)
+- Full Backswing: Club is taken all the way back
+- Full Downswing: The downswing is with such velocity that an impact is intended.
+
+As soon as the above is determined to be true, register a swing detection.
 
 IMPORTANT: 
-- Detect the swing as soon as follow-through is visible. Don't wait for full finish.
 - Only detect ONE swing per sequence.
 - A person simply moving out of frame or adjusting position is NOT a swing.
 - If the sequence shows someone mid-swing or ending a swing, that's NOT a complete swing.
 
 Confidence scoring:
-- 0.9-1.0: Clear swing with follow-through visible
+- 0.9-1.0: Clearly a full swing is in progress.
 - 0.8-0.9: Swing detected, minor visibility issues
 - 0.7-0.8: Likely swing, some phases unclear
 - 0.5-0.7: Questionable, missing key phases

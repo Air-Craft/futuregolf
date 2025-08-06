@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class FilePromptLoader(PromptLoader):
     """Load prompts from text files"""
     
-    def __init__(self, prompts_dir: str = "prompts"):
+    def __init__(self, prompts_dir: str = "app/prompts"):
         """
         Initialize prompt loader
         

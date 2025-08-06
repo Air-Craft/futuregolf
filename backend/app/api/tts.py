@@ -253,7 +253,7 @@ async def generate_coaching_tts(request: TTSRequest):
         coaching_model = "tts-1-hd"  # Higher quality
         coaching_speed = 1.2  # Balanced speed for energy and clarity
         
-        logger.info(f"Generating coaching TTS for {len(request.text)} characters")
+        logger.info(f"🗣️ Generating coaching TTS for text \"{request.text}\"")
         
         # Generate speech with coaching settings
         response = client.audio.speech.create(

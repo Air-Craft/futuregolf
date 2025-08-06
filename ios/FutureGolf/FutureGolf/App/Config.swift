@@ -45,7 +45,7 @@ struct Config {
         #if targetEnvironment(simulator)
         return "http://localhost:8000"
         #else
-        return "http://brians-macbook-pro-2.local:8000"
+        return "http://brians-macbook-pro-2.local:8156"
         #endif
     }()
     

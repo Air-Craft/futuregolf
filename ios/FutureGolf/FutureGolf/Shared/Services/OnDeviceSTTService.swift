@@ -25,7 +25,8 @@ class OnDeviceSTTService: NSObject, ObservableObject {
         "ready",
         "let's go",
         "do it",
-        "record"
+        "record",
+        "let's begin"
         // Removed "recording" to prevent TTS feedback loops
     ]
     
