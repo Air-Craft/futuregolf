@@ -7,6 +7,10 @@ import pytest
 import logging
 import os
 from typing import Generator
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -39,6 +43,9 @@ def integration_test_setup():
     
     if not os.getenv("GCS_BUCKET_NAME"):
         warnings.append("⚠️  No GCS_BUCKET_NAME found - storage tests may fail")
+    
+    if not os.getenv("GOOGLE_CLOUD_API_KEY") and not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+        warnings.append("⚠️  No Google Cloud authentication found - storage tests will fail")
     
     if warnings:
         logger.warning("Environment warnings:")

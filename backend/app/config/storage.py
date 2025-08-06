@@ -8,6 +8,8 @@ from google.cloud.exceptions import GoogleCloudError
 from typing import Optional, Dict, Any
 import logging
 from urllib.parse import urlparse
+from google.auth.credentials import AnonymousCredentials
+from google.auth.api_key import Credentials as APIKeyCredentials
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -19,6 +21,11 @@ class StorageConfig:
     def __init__(self):
         # Google Cloud project settings
         self.project_id = os.getenv("GCS_PROJECT_ID", "futuregolf")
+        
+        # API Key authentication
+        self.api_key = os.getenv("GOOGLE_CLOUD_API_KEY")
+        
+        # Service account credentials (fallback)
         credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
         
         # Handle relative paths relative to backend directory
@@ -29,7 +36,8 @@ class StorageConfig:
             logger.info(f"Resolved credentials path: {self.credentials_path}")
         else:
             self.credentials_path = credentials_path
-            logger.info(f"Using absolute credentials path: {self.credentials_path}")
+            if credentials_path:
+                logger.info(f"Using absolute credentials path: {self.credentials_path}")
         
         # Storage bucket settings
         self.bucket_name = os.getenv("GCS_BUCKET_NAME", "futuregolf-videos")
@@ -73,43 +81,53 @@ class StorageConfig:
         if not self.project_id:
             raise ValueError("GCS_PROJECT_ID environment variable is required")
         
-        if not self.credentials_path:
-            logger.warning("No Google Cloud credentials found. Ensure service account is configured.")
-        elif not os.path.exists(self.credentials_path):
-            logger.error(f"Google Cloud credentials file not found at: {self.credentials_path}")
+        # Check for authentication method
+        if not self.api_key and not self.credentials_path:
+            logger.warning("No Google Cloud authentication found. Set either GOOGLE_CLOUD_API_KEY or GOOGLE_APPLICATION_CREDENTIALS.")
+        elif self.api_key:
+            logger.info("Using Google Cloud API Key authentication")
+        elif self.credentials_path:
+            if not os.path.exists(self.credentials_path):
+                logger.error(f"Google Cloud credentials file not found at: {self.credentials_path}")
+            else:
+                logger.info("Using Google Cloud service account authentication")
     
     def get_storage_client(self) -> storage.Client:
         """Get Google Cloud Storage client."""
         try:
-            if self.credentials_path:
+            # Note: API Keys have limited GCS functionality. Prefer service account for full access.
+            # For now, prioritize service account if available
+            if self.credentials_path and os.path.exists(self.credentials_path):
+                # Use service account authentication (full access)
+                logger.info("Using service account for GCS authentication")
                 return storage.Client.from_service_account_json(
                     self.credentials_path, 
                     project=self.project_id
                 )
+            elif self.api_key:
+                # Use API Key authentication (limited operations)
+                logger.warning("Using API Key for GCS - limited operations available")
+                credentials = APIKeyCredentials(self.api_key)
+                return storage.Client(
+                    credentials=credentials,
+                    project=self.project_id
+                )
             else:
-                # Use default credentials (service account, etc.)
+                # Use default credentials (application default credentials, etc.)
+                logger.info("Using application default credentials")
                 return storage.Client(project=self.project_id)
         except Exception as e:
             logger.error(f"Failed to create storage client: {e}")
             raise
     
     def get_bucket(self) -> storage.Bucket:
-        """Get or create the storage bucket."""
+        """Get the storage bucket (assumes it already exists)."""
         client = self.get_storage_client()
         bucket = client.bucket(self.bucket_name)
         
-        # Check if bucket exists, create if not
-        try:
-            bucket.reload()
-        except GoogleCloudError:
-            logger.info(f"Creating bucket: {self.bucket_name}")
-            bucket = client.create_bucket(
-                self.bucket_name,
-                location=self.location
-            )
-            bucket.storage_class = self.default_storage_class
-            bucket.patch()
-            self._configure_bucket_lifecycle(bucket)
+        # Don't try to create the bucket automatically - it should exist
+        # This avoids permission issues during initialization
+        logger.info(f"Using bucket: {self.bucket_name}")
         
         return bucket
     

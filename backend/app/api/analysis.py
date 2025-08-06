@@ -142,6 +142,10 @@ async def upload_video_to_analysis(
         analysis.status = AnalysisStatus.PROCESSING  # Use PROCESSING for analysis in progress
         
         await db.commit()
+        await db.refresh(analysis)  # Refresh to ensure we have the latest state
+        
+        # Get status value before exiting session context
+        status_value = analysis.status.value
         
         # Spawn background task for analysis
         logger.info(f"Queuing background analysis for UUID: {analysis_uuid}")
@@ -154,7 +158,7 @@ async def upload_video_to_analysis(
             "success": True,
             "message": "Video uploaded successfully, analysis started",
             "uuid": str(analysis_uuid),
-            "status": analysis.status.value
+            "status": status_value
         }
         
     except HTTPException:

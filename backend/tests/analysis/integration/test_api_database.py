@@ -4,8 +4,10 @@ These tests use real Neon database.
 """
 
 import pytest
+import pytest_asyncio
 import uuid
 import io
+import asyncio
 from fastapi import UploadFile, BackgroundTasks
 from sqlalchemy import select
 from unittest.mock import patch, Mock, AsyncMock
@@ -15,13 +17,15 @@ from app.models.video_analysis import VideoAnalysis, AnalysisStatus
 from app.models.user import User
 
 
-@pytest.fixture
+@pytest_asyncio.fixture(scope="function")
 async def test_user():
     """Create a test user for integration tests"""
+    user_id = None
+    
+    # Create user
     async with AsyncSessionLocal() as session:
         user = User(
             email=f"api_test_{uuid.uuid4().hex}@example.com",
-            username=f"api_test_{uuid.uuid4().hex[:8]}",
             hashed_password="hashed_password_test"
         )
         session.add(user)
@@ -32,11 +36,12 @@ async def test_user():
     yield user_id
     
     # Cleanup
-    async with AsyncSessionLocal() as session:
-        user = await session.get(User, user_id)
-        if user:
-            await session.delete(user)
-            await session.commit()
+    if user_id:
+        async with AsyncSessionLocal() as session:
+            user = await session.get(User, user_id)
+            if user:
+                await session.delete(user)
+                await session.commit()
 
 
 @pytest.fixture
@@ -107,11 +112,13 @@ async def test_upload_video_to_analysis_success(test_user, mock_storage, mock_or
         result = await create_analysis(user_id=test_user, db=db)
         analysis_uuid = result["uuid"]
         
-        # Create mock file
+        # Create mock file with proper async support
         file_content = b"fake video content"
+        file_io = io.BytesIO(file_content)
         file = UploadFile(
             filename="test.mp4",
-            file=io.BytesIO(file_content)
+            file=file_io,
+            size=len(file_content)
         )
         
         # Create background tasks
@@ -168,7 +175,7 @@ async def test_get_analysis_complete_status(test_user):
         
         assert result["uuid"] == str(analysis.uuid)
         assert result["status"] == "COMPLETED"
-        assert result["result"] == {"result": "test"}
+        assert result["analysisJSON"] == {"result": "test"}
         
         # Cleanup
         await db.delete(analysis)
@@ -199,7 +206,7 @@ async def test_get_analysis_failed_status(test_user):
         
         assert result["uuid"] == str(analysis.uuid)
         assert result["status"] == "FAILED"
-        assert result["error"] == "Test error"
+        assert result["errorDescription"] == "Test error"
         
         # Cleanup
         await db.delete(analysis)

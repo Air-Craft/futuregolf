@@ -82,8 +82,9 @@ class TestGCSOperations:
                 )
             
             # Assert upload succeeded
+            print(f"🐳 {result}")
             assert result["success"] is True, f"GCS upload failed: {result.get('error')}"
-            assert "url" in result, "Upload result missing URL"
+            assert "public_url" in result, "Upload result missing public_url"
             assert "blob_name" in result, "Upload result missing blob name"
             
             # Verify file exists in GCS
@@ -119,8 +120,9 @@ class TestGCSOperations:
             dest_blob = storage_service.bucket.blob(dest_name)
             assert dest_blob.exists(), "Destination file not found after move"
             
-            # Verify source is deleted
-            source_blob.reload()  # Refresh to check existence
+            # Verify source is deleted (reload will fail with 404)
+            # After move, source should not exist
+            source_blob = storage_service.bucket.blob(source_name)
             assert not source_blob.exists(), "Source file still exists after move"
             
             # Cleanup
@@ -202,12 +204,15 @@ class TestGCSOperations:
             # Try to access a bucket that doesn't exist or we don't have access to
             invalid_bucket = client.bucket("invalid-bucket-name-that-should-not-exist-xyz123")
             
-            with pytest.raises(Exception) as exc_info:
-                # This should raise an exception
-                invalid_bucket.exists()
-            
-            # Verify we get a proper error
-            assert exc_info.value is not None
+            # Try to check if bucket exists - this should return False or raise an exception
+            try:
+                exists = invalid_bucket.exists()
+                # If it doesn't raise, it should return False
+                assert not exists, "Invalid bucket unexpectedly exists"
+            except Exception as e:
+                # This is expected - we're testing error handling
+                logger.info(f"Expected error occurred: {e}")
+                assert "403" in str(e) or "404" in str(e) or "does not exist" in str(e).lower()
             
         except Exception as e:
             # This is expected - we're testing error handling

@@ -4,6 +4,7 @@ These tests use REAL Neon database and MUST FAIL if the database is not accessib
 """
 
 import pytest
+import pytest_asyncio
 import os
 import uuid
 import asyncio
@@ -20,7 +21,7 @@ from app.models.video import Video
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module")
 async def verify_database_connection():
     """Verify database is accessible before running tests"""
     try:
@@ -38,7 +39,7 @@ async def verify_database_connection():
         pytest.fail(f"Neon database integration test failed - database not accessible: {e}")
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def db_session():
     """Provide a database session for tests"""
     async with AsyncSessionLocal() as session:
@@ -47,23 +48,31 @@ async def db_session():
         await session.rollback()
 
 
-@pytest.fixture
-async def test_user(db_session):
-    """Create a test user for foreign key constraints"""
-    user = User(
-        email=f"test_{uuid.uuid4().hex}@example.com",
-        username=f"test_user_{uuid.uuid4().hex[:8]}",
-        hashed_password="hashed_password_123"
-    )
-    db_session.add(user)
-    await db_session.commit()
-    await db_session.refresh(user)
+@pytest_asyncio.fixture
+async def test_user():
+    """Create a test user for foreign key constraints - returns user ID only"""
+    user_id = None
     
-    yield user
+    # Create user in its own session
+    async with AsyncSessionLocal() as session:
+        user = User(
+            email=f"test_{uuid.uuid4().hex}@example.com",
+            hashed_password="hashed_password_123"
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        user_id = user.id
     
-    # Cleanup
-    await db_session.delete(user)
-    await db_session.commit()
+    yield user_id
+    
+    # Cleanup in its own session
+    if user_id:
+        async with AsyncSessionLocal() as session:
+            user = await session.get(User, user_id)
+            if user:
+                await session.delete(user)
+                await session.commit()
 
 
 @pytest.mark.integration
@@ -93,120 +102,123 @@ class TestNeonDatabaseOperations:
             pytest.fail(f"Neon connection test failed: {e}")
     
     @pytest.mark.asyncio
-    async def test_analysis_crud_real(self, db_session, test_user):
+    async def test_analysis_crud_real(self, test_user):
         """Test real CRUD operations on VideoAnalysis table"""
-        try:
-            # CREATE
-            analysis = VideoAnalysis(
-                user_id=test_user.id,
-                uuid=uuid.uuid4(),
-                status=AnalysisStatus.PENDING
-            )
-            db_session.add(analysis)
-            await db_session.commit()
-            await db_session.refresh(analysis)
-            
-            analysis_id = analysis.id
-            analysis_uuid = analysis.uuid
-            
-            # READ
-            result = await db_session.execute(
-                select(VideoAnalysis).filter(VideoAnalysis.uuid == analysis_uuid)
-            )
-            fetched = result.scalar_one_or_none()
-            assert fetched is not None, "Failed to read created analysis"
-            assert fetched.status == AnalysisStatus.PENDING
-            
-            # UPDATE
-            fetched.status = AnalysisStatus.PROCESSING
-            fetched.processing_started_at = datetime.utcnow()
-            await db_session.commit()
-            
-            # Verify update
-            result = await db_session.execute(
-                select(VideoAnalysis).filter(VideoAnalysis.id == analysis_id)
-            )
-            updated = result.scalar_one_or_none()
-            assert updated.status == AnalysisStatus.PROCESSING
-            assert updated.processing_started_at is not None
-            
-            # DELETE
-            await db_session.delete(updated)
-            await db_session.commit()
-            
-            # Verify deletion
-            result = await db_session.execute(
-                select(VideoAnalysis).filter(VideoAnalysis.id == analysis_id)
-            )
-            deleted = result.scalar_one_or_none()
-            assert deleted is None, "Failed to delete analysis"
-            
-        except Exception as e:
-            pytest.fail(f"CRUD operations test failed: {e}")
-    
-    @pytest.mark.asyncio
-    async def test_enum_status_values(self, db_session, test_user):
-        """Test that enum status values work correctly with database"""
-        try:
-            # Test all valid status values
-            for status in AnalysisStatus:
+        async with AsyncSessionLocal() as db_session:
+            try:
+                # CREATE
                 analysis = VideoAnalysis(
-                    user_id=test_user.id,
+                    user_id=test_user,  # test_user is now just the ID
                     uuid=uuid.uuid4(),
-                    status=status
+                    status=AnalysisStatus.PENDING
                 )
                 db_session.add(analysis)
                 await db_session.commit()
                 await db_session.refresh(analysis)
                 
-                # Verify status was saved correctly
-                assert analysis.status == status, f"Status {status} not saved correctly"
+                analysis_id = analysis.id
+                analysis_uuid = analysis.uuid
                 
-                # Clean up
-                await db_session.delete(analysis)
+                # READ
+                result = await db_session.execute(
+                    select(VideoAnalysis).filter(VideoAnalysis.uuid == analysis_uuid)
+                )
+                fetched = result.scalar_one_or_none()
+                assert fetched is not None, "Failed to read created analysis"
+                assert fetched.status == AnalysisStatus.PENDING
+                
+                # UPDATE
+                fetched.status = AnalysisStatus.PROCESSING
+                fetched.processing_started_at = datetime.utcnow()
                 await db_session.commit()
                 
-        except Exception as e:
-            pytest.fail(f"Enum status test failed: {e}")
+                # Verify update
+                result = await db_session.execute(
+                    select(VideoAnalysis).filter(VideoAnalysis.id == analysis_id)
+                )
+                updated = result.scalar_one_or_none()
+                assert updated.status == AnalysisStatus.PROCESSING
+                assert updated.processing_started_at is not None
+                
+                # DELETE
+                await db_session.delete(updated)
+                await db_session.commit()
+                
+                # Verify deletion
+                result = await db_session.execute(
+                    select(VideoAnalysis).filter(VideoAnalysis.id == analysis_id)
+                )
+                deleted = result.scalar_one_or_none()
+                assert deleted is None, "Failed to delete analysis"
+                
+            except Exception as e:
+                pytest.fail(f"CRUD operations test failed: {e}")
     
     @pytest.mark.asyncio
-    async def test_uuid_uniqueness_constraint(self, db_session, test_user):
+    async def test_enum_status_values(self, test_user):
+        """Test that enum status values work correctly with database"""
+        async with AsyncSessionLocal() as db_session:
+            try:
+                # Test all valid status values
+                for status in AnalysisStatus:
+                    analysis = VideoAnalysis(
+                        user_id=test_user,  # test_user is now just the ID
+                        uuid=uuid.uuid4(),
+                        status=status
+                    )
+                    db_session.add(analysis)
+                    await db_session.commit()
+                    await db_session.refresh(analysis)
+                    
+                    # Verify status was saved correctly
+                    assert analysis.status == status, f"Status {status} not saved correctly"
+                    
+                    # Clean up
+                    await db_session.delete(analysis)
+                    await db_session.commit()
+                    
+            except Exception as e:
+                pytest.fail(f"Enum status test failed: {e}")
+    
+    @pytest.mark.asyncio
+    async def test_uuid_uniqueness_constraint(self, test_user):
         """Test UUID uniqueness constraint in database"""
-        try:
-            # Create first analysis
-            test_uuid = uuid.uuid4()
-            analysis1 = VideoAnalysis(
-                user_id=test_user.id,
-                uuid=test_uuid,
-                status=AnalysisStatus.PENDING
-            )
-            db_session.add(analysis1)
-            await db_session.commit()
-            
-            # Try to create second with same UUID
-            analysis2 = VideoAnalysis(
-                user_id=test_user.id,
-                uuid=test_uuid,  # Same UUID
-                status=AnalysisStatus.PENDING
-            )
-            db_session.add(analysis2)
-            
-            # This should raise IntegrityError
-            with pytest.raises(IntegrityError) as exc_info:
+        async with AsyncSessionLocal() as db_session:
+            try:
+                # Create first analysis
+                test_uuid = uuid.uuid4()
+                analysis1 = VideoAnalysis(
+                    user_id=test_user,
+                    uuid=test_uuid,
+                    status=AnalysisStatus.PENDING
+                )
+                db_session.add(analysis1)
                 await db_session.commit()
-            
-            assert "unique" in str(exc_info.value).lower() or "duplicate" in str(exc_info.value).lower()
-            
-            # Rollback and cleanup
-            await db_session.rollback()
-            await db_session.delete(analysis1)
-            await db_session.commit()
-            
-        except IntegrityError:
-            # Expected
-            await db_session.rollback()
-        except Exception as e:
-            pytest.fail(f"UUID uniqueness test failed: {e}")
+                
+                # Try to create second with same UUID
+                analysis2 = VideoAnalysis(
+                    user_id=test_user,
+                    uuid=test_uuid,  # Same UUID
+                    status=AnalysisStatus.PENDING
+                )
+                db_session.add(analysis2)
+                
+                # This should raise IntegrityError
+                with pytest.raises(IntegrityError) as exc_info:
+                    await db_session.commit()
+                
+                assert "unique" in str(exc_info.value).lower() or "duplicate" in str(exc_info.value).lower()
+                
+                # Rollback and cleanup
+                await db_session.rollback()
+                await db_session.delete(analysis1)
+                await db_session.commit()
+                
+            except IntegrityError:
+                # Expected
+                await db_session.rollback()
+            except Exception as e:
+                pytest.fail(f"UUID uniqueness test failed: {e}")
     
     @pytest.mark.asyncio
     async def test_concurrent_database_access(self, test_user):
@@ -216,7 +228,7 @@ class TestNeonDatabaseOperations:
             async def create_analysis(index):
                 async with AsyncSessionLocal() as session:
                     analysis = VideoAnalysis(
-                        user_id=test_user.id,
+                        user_id=test_user,
                         uuid=uuid.uuid4(),
                         status=AnalysisStatus.PENDING
                     )
@@ -244,83 +256,85 @@ class TestNeonDatabaseOperations:
             pytest.fail(f"Concurrent access test failed: {e}")
     
     @pytest.mark.asyncio
-    async def test_transaction_rollback(self, db_session, test_user):
+    async def test_transaction_rollback(self, test_user):
         """Test transaction rollback behavior"""
-        try:
-            # Start transaction
-            analysis = VideoAnalysis(
-                user_id=test_user.id,
-                uuid=uuid.uuid4(),
-                status=AnalysisStatus.PENDING
-            )
-            db_session.add(analysis)
-            await db_session.flush()  # Get ID without committing
-            
-            analysis_id = analysis.id
-            assert analysis_id is not None, "ID not assigned after flush"
-            
-            # Rollback
-            await db_session.rollback()
-            
-            # Verify not in database
-            result = await db_session.execute(
-                select(VideoAnalysis).filter(VideoAnalysis.id == analysis_id)
-            )
-            fetched = result.scalar_one_or_none()
-            assert fetched is None, "Rolled back record still in database"
-            
-        except Exception as e:
-            pytest.fail(f"Transaction rollback test failed: {e}")
+        async with AsyncSessionLocal() as db_session:
+            try:
+                # Start transaction
+                analysis = VideoAnalysis(
+                    user_id=test_user,
+                    uuid=uuid.uuid4(),
+                    status=AnalysisStatus.PENDING
+                )
+                db_session.add(analysis)
+                await db_session.flush()  # Get ID without committing
+                
+                analysis_id = analysis.id
+                assert analysis_id is not None, "ID not assigned after flush"
+                
+                # Rollback
+                await db_session.rollback()
+                
+                # Verify not in database
+                result = await db_session.execute(
+                    select(VideoAnalysis).filter(VideoAnalysis.id == analysis_id)
+                )
+                fetched = result.scalar_one_or_none()
+                assert fetched is None, "Rolled back record still in database"
+                
+            except Exception as e:
+                pytest.fail(f"Transaction rollback test failed: {e}")
     
     @pytest.mark.asyncio
-    async def test_jsonb_fields(self, db_session, test_user):
+    async def test_jsonb_fields(self, test_user):
         """Test JSONB field operations"""
-        try:
-            # Create analysis with JSONB data
-            analysis_data = {
-                "swing_metrics": {
-                    "speed": 95.5,
-                    "angle": 45.2,
-                    "quality": "excellent"
-                },
-                "timestamps": [1.0, 2.5, 3.8]
-            }
-            
-            analysis = VideoAnalysis(
-                user_id=test_user.id,
-                uuid=uuid.uuid4(),
-                status=AnalysisStatus.COMPLETED,
-                analysisJSON=analysis_data,
-                ai_analysis={"legacy": "data"},
-                swing_metrics={"club_speed": 90}
-            )
-            db_session.add(analysis)
-            await db_session.commit()
-            await db_session.refresh(analysis)
-            
-            # Verify JSONB data
-            assert analysis.analysisJSON == analysis_data
-            assert analysis.analysisJSON["swing_metrics"]["speed"] == 95.5
-            assert len(analysis.analysisJSON["timestamps"]) == 3
-            
-            # Query by JSONB field (PostgreSQL specific)
-            result = await db_session.execute(
-                text("""
-                    SELECT id FROM video_analyses 
-                    WHERE analysis_json @> '{"swing_metrics": {"quality": "excellent"}}'
-                    AND id = :id
-                """),
-                {"id": analysis.id}
-            )
-            found_id = result.scalar()
-            assert found_id == analysis.id, "JSONB query failed"
-            
-            # Cleanup
-            await db_session.delete(analysis)
-            await db_session.commit()
-            
-        except Exception as e:
-            pytest.fail(f"JSONB fields test failed: {e}")
+        async with AsyncSessionLocal() as db_session:
+            try:
+                # Create analysis with JSONB data
+                analysis_data = {
+                    "swing_metrics": {
+                        "speed": 95.5,
+                        "angle": 45.2,
+                        "quality": "excellent"
+                    },
+                    "timestamps": [1.0, 2.5, 3.8]
+                }
+                
+                analysis = VideoAnalysis(
+                    user_id=test_user,
+                    uuid=uuid.uuid4(),
+                    status=AnalysisStatus.COMPLETED,
+                    analysisJSON=analysis_data,
+                    ai_analysis={"legacy": "data"},
+                    swing_metrics={"club_speed": 90}
+                )
+                db_session.add(analysis)
+                await db_session.commit()
+                await db_session.refresh(analysis)
+                
+                # Verify JSONB data
+                assert analysis.analysisJSON == analysis_data
+                assert analysis.analysisJSON["swing_metrics"]["speed"] == 95.5
+                assert len(analysis.analysisJSON["timestamps"]) == 3
+                
+                # Query by JSONB field (PostgreSQL specific)
+                result = await db_session.execute(
+                    text("""
+                        SELECT id FROM video_analyses 
+                        WHERE analysis_json @> '{"swing_metrics": {"quality": "excellent"}}'
+                        AND id = :id
+                    """),
+                    {"id": analysis.id}
+                )
+                found_id = result.scalar()
+                assert found_id == analysis.id, "JSONB query failed"
+                
+                # Cleanup
+                await db_session.delete(analysis)
+                await db_session.commit()
+                
+            except Exception as e:
+                pytest.fail(f"JSONB fields test failed: {e}")
 
 
 @pytest.mark.integration
@@ -339,7 +353,7 @@ class TestNeonPerformance:
                 analyses = []
                 for i in range(100):
                     analysis = VideoAnalysis(
-                        user_id=test_user.id,
+                        user_id=test_user,
                         uuid=uuid.uuid4(),
                         status=AnalysisStatus.PENDING
                     )
@@ -377,7 +391,7 @@ class TestNeonPerformance:
             async with AsyncSessionLocal() as session:
                 test_uuid = uuid.uuid4()
                 analysis = VideoAnalysis(
-                    user_id=test_user.id,
+                    user_id=test_user,
                     uuid=test_uuid,
                     status=AnalysisStatus.COMPLETED
                 )

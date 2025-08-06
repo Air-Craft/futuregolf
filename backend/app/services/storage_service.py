@@ -32,10 +32,12 @@ class StorageService:
         content_type: Optional[str] = None
     ) -> Dict[str, Any]:
         """Upload a video file to Google Cloud Storage."""
+        logger.debug(f"Starting video upload - filename: {filename}, user_id: {user_id}, video_id: {video_id}")
         try:
             # Validate file type
             if not content_type:
                 content_type, _ = mimetypes.guess_type(filename)
+                logger.debug(f"Guessed content type: {content_type}")
             
             if not self.config.is_valid_video_type(content_type):
                 raise ValueError(f"Invalid video type: {content_type}")
@@ -43,11 +45,13 @@ class StorageService:
             # Generate unique filename
             file_extension = os.path.splitext(filename)[1]
             unique_filename = f"{uuid.uuid4()}{file_extension}"
+            logger.debug(f"Generated unique filename: {unique_filename}")
             
             # Generate storage path
             blob_name = self.config.get_file_path(
                 user_id, video_id, "video", unique_filename
             )
+            logger.debug(f"Generated blob name: {blob_name}")
             
             # Create blob
             blob = self.bucket.blob(blob_name)
@@ -66,9 +70,12 @@ class StorageService:
             file.seek(0)
             file_size = len(file.read())
             file.seek(0)
+            logger.debug(f"File size: {file_size} bytes")
             
             # Always use simple upload for now (golf videos are typically < 100MB)
+            logger.debug(f"Starting upload to GCS - blob: {blob_name}")
             blob.upload_from_file(file, content_type=content_type)
+            logger.debug(f"Upload completed successfully")
             upload_result = {
                 "blob_name": blob_name,
                 "size": file_size,
@@ -77,6 +84,7 @@ class StorageService:
             
             # Get public URL
             public_url = self.config.get_public_url(blob_name)
+            logger.info(f"Video uploaded successfully - blob_name: {blob_name}, size: {file_size} bytes")
             
             return {
                 "success": True,
@@ -103,6 +111,7 @@ class StorageService:
         format: str = "jpeg"
     ) -> Dict[str, Any]:
         """Upload video thumbnail."""
+        logger.debug(f"Starting thumbnail upload - user_id: {user_id}, video_id: {video_id}, format: {format}")
         try:
             # Generate filename
             filename = f"thumbnail_{uuid.uuid4()}.{format}"
@@ -123,7 +132,9 @@ class StorageService:
             }
             
             # Upload thumbnail
+            logger.debug(f"Uploading thumbnail - blob_name: {blob_name}, size: {len(thumbnail_data)} bytes")
             blob.upload_from_string(thumbnail_data, content_type=f"image/{format}")
+            logger.info(f"Thumbnail uploaded successfully - blob_name: {blob_name}")
             
             return {
                 "success": True,
@@ -147,6 +158,7 @@ class StorageService:
         processing_type: str = "analysis"
     ) -> Dict[str, Any]:
         """Upload processed video with overlays."""
+        logger.debug(f"Starting processed video upload - user_id: {user_id}, video_id: {video_id}, type: {processing_type}")
         try:
             # Generate filename
             filename = f"processed_{processing_type}_{uuid.uuid4()}.mp4"
@@ -168,7 +180,9 @@ class StorageService:
             }
             
             # Upload processed video
+            logger.debug(f"Uploading processed video - blob_name: {blob_name}, size: {len(processed_data)} bytes")
             blob.upload_from_string(processed_data, content_type="video/mp4")
+            logger.info(f"Processed video uploaded successfully - blob_name: {blob_name}")
             
             return {
                 "success": True,
@@ -186,9 +200,11 @@ class StorageService:
     
     async def generate_signed_url(self, blob_name: str, expiration_hours: int = None) -> str:
         """Generate signed URL for private video access."""
+        logger.debug(f"Generating signed URL for blob: {blob_name}")
         try:
             if expiration_hours is None:
                 expiration_hours = self.config.signed_url_expiration
+            logger.debug(f"Using expiration: {expiration_hours} hours")
             
             blob = self.bucket.blob(blob_name)
             
@@ -198,6 +214,7 @@ class StorageService:
                 expiration=datetime.utcnow() + timedelta(hours=expiration_hours),
                 method="GET"
             )
+            logger.debug(f"Generated signed URL successfully")
             
             return url
             
@@ -207,10 +224,11 @@ class StorageService:
     
     async def delete_file(self, blob_name: str) -> bool:
         """Delete a file from storage."""
+        logger.debug(f"Attempting to delete file: {blob_name}")
         try:
             blob = self.bucket.blob(blob_name)
             blob.delete()
-            logger.info(f"Deleted file: {blob_name}")
+            logger.info(f"Successfully deleted file: {blob_name}")
             return True
             
         except NotFound:
@@ -222,9 +240,11 @@ class StorageService:
     
     async def get_file_metadata(self, blob_name: str) -> Optional[Dict[str, Any]]:
         """Get metadata for a file."""
+        logger.debug(f"Getting metadata for blob: {blob_name}")
         try:
             blob = self.bucket.blob(blob_name)
             blob.reload()
+            logger.debug(f"Successfully retrieved metadata for blob: {blob_name}")
             
             return {
                 "name": blob.name,
@@ -245,6 +265,7 @@ class StorageService:
     
     async def list_user_files(self, user_id: int, file_type: str = None) -> List[Dict[str, Any]]:
         """List all files for a user."""
+        logger.debug(f"Listing files for user_id: {user_id}, file_type: {file_type}")
         try:
             prefix = f"user_{user_id}/"
             if file_type:
@@ -257,6 +278,7 @@ class StorageService:
                 if folder:
                     prefix = f"{folder}/{prefix}"
             
+            logger.debug(f"Listing blobs with prefix: {prefix}")
             blobs = self.bucket.list_blobs(prefix=prefix)
             
             files = []
@@ -270,6 +292,7 @@ class StorageService:
                     "metadata": blob.metadata
                 })
             
+            logger.debug(f"Found {len(files)} files for user_id: {user_id}")
             return files
             
         except Exception as e:
@@ -311,22 +334,28 @@ class StorageService:
         Returns:
             True if successful, False otherwise
         """
+        logger.debug(f"Moving file from {source_blob_name} to {dest_blob_name}")
         try:
             # Get source blob
             source_blob = self.bucket.blob(source_blob_name)
             
             # Check if source exists
+            logger.debug(f"Checking if source blob exists: {source_blob_name}")
             if not source_blob.exists():
                 logger.error(f"Source blob not found: {source_blob_name}")
                 return False
+            logger.debug(f"Source blob exists, proceeding with copy")
             
             # Copy to destination
             dest_blob = self.bucket.blob(dest_blob_name)
             dest_blob.content_type = source_blob.content_type
             
             # Copy the blob
+            logger.debug(f"Downloading source blob content")
+            source_content = source_blob.download_as_bytes()
+            logger.debug(f"Uploading to destination blob: {dest_blob_name}")
             dest_blob.upload_from_string(
-                source_blob.download_as_bytes(),
+                source_content,
                 content_type=source_blob.content_type
             )
             
@@ -353,5 +382,6 @@ def get_storage_service():
     """Get the global storage service instance, creating it if needed."""
     global storage_service
     if storage_service is None:
+        logger.debug("Creating new StorageService instance")
         storage_service = StorageService()
     return storage_service
