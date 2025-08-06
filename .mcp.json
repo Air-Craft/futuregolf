@@ -1,13 +1,3 @@
 {
-  "mcpServers": {
-    "neon": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "mcp-remote@latest",
-        "https://mcp.neon.tech/sse"
-      ],
-      "env": {}
-    }
-  }
+  "mcpServers": {}
 }
