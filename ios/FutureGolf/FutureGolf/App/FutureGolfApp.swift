@@ -36,7 +36,8 @@ struct FutureGolfApp: App {
                             SwingAnalysisView(videoURL: videoURL, analysisId: analysisId).task { print("🚀 Navigating to analysis screen") }
                         case .previousAnalyses:
                             PreviousAnalysesView().task { print("🚀 Navigating to PreviousAnalysesScreen") }
-                            
+                        case .tmpCoachingDemo:
+                            CoachingVideoView().task { print("🚀 Navigating to TMP Coaching Demo") }
                         }
                     }
             }

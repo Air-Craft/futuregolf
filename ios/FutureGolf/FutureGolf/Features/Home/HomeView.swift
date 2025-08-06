@@ -170,6 +170,7 @@ struct HomeView: View {
             Button(action: {
                 // showCoachingVideo = true
                 LiquidGlassHaptics.impact(.medium)
+                appState.navigateTo(.tmpCoachingDemo)
             }) {
                 HStack {
                     Image(systemName: "play.tv.fill")

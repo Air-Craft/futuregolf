@@ -5,6 +5,7 @@ enum NavigationRoute: Hashable {
     case recording
     case swingAnalysis(videoURL: URL, analysisId: String?)
     case previousAnalyses
+    case tmpCoachingDemo
     
     // Custom Hashable implementation
     func hash(into hasher: inout Hasher) {
@@ -17,6 +18,8 @@ enum NavigationRoute: Hashable {
             hasher.combine(id)
         case .previousAnalyses:
             hasher.combine("previousAnalyses")
+        case .tmpCoachingDemo:
+            hasher.combine("tmpCoachingDemo")
         }
         
     }
