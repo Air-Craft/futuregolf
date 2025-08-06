@@ -15,13 +15,13 @@ import os
 from typing import Generator, Dict, Any
 
 # Import application components
-from main import app
-from database.config import get_db, Base
-from models.user import User, SubscriptionTier
-from models.video import Video, VideoStatus
-from models.video_analysis import VideoAnalysis
-from services.auth_utils import auth_utils
-from services.storage_service import storage_service
+from app.main import app
+from app.database.config import get_db, Base
+from app.models.user import User, SubscriptionTier
+from app.models.video import Video, VideoStatus
+from app.models.video_analysis import VideoAnalysis
+from app.services.auth_utils import auth_utils
+from app.services.storage_service import storage_service
 
 
 # Test database setup

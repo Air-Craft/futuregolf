@@ -299,6 +299,51 @@ class StorageService:
         except Exception as e:
             logger.error(f"Failed to cleanup temp files: {e}")
             return 0
+    
+    async def move_file(self, source_blob_name: str, dest_blob_name: str) -> bool:
+        """
+        Move a file from one location to another in GCS.
+        
+        Args:
+            source_blob_name: Source blob name/path
+            dest_blob_name: Destination blob name/path
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get source blob
+            source_blob = self.bucket.blob(source_blob_name)
+            
+            # Check if source exists
+            if not source_blob.exists():
+                logger.error(f"Source blob not found: {source_blob_name}")
+                return False
+            
+            # Copy to destination
+            dest_blob = self.bucket.blob(dest_blob_name)
+            dest_blob.content_type = source_blob.content_type
+            
+            # Copy the blob
+            dest_blob.upload_from_string(
+                source_blob.download_as_bytes(),
+                content_type=source_blob.content_type
+            )
+            
+            # Copy metadata if present
+            if source_blob.metadata:
+                dest_blob.metadata = source_blob.metadata
+                dest_blob.patch()
+            
+            # Delete source blob
+            source_blob.delete()
+            
+            logger.info(f"Successfully moved file from {source_blob_name} to {dest_blob_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to move file from {source_blob_name} to {dest_blob_name}: {e}")
+            return False
 
 
 # Global service instance (lazy-loaded)

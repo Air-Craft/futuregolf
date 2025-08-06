@@ -11,7 +11,6 @@ import logging
 from app.database.config import get_db
 from app.models.video import Video, VideoStatus
 from app.services.storage_service import get_storage_service
-from app.services.video_analysis_service import get_clean_video_analysis_service
 from app.config.storage import storage_config
 from app.config.api import API_VERSION_PREFIX
 
@@ -82,19 +81,8 @@ async def upload_video(
             db.commit()
             db.refresh(video)
             
-            # Auto-trigger background analysis using the clean analysis service
-            logger.info(f"Auto-triggering background analysis for video_id={video.id}")
-            try:
-                analysis_service = get_clean_video_analysis_service()
-                background_tasks.add_task(
-                    analysis_service.analyze_video_from_storage,
-                    video.id,
-                    user_id
-                )
-                logger.info(f"Background analysis task queued for video_id={video.id}")
-            except Exception as e:
-                logger.error(f"Failed to queue background analysis for video_id={video.id}: {e}")
-                # Don't fail the upload if analysis queueing fails
+            # Note: Analysis is now triggered separately via the /analysis endpoints
+            # This decouples upload from analysis per the new architecture
             
             return {
                 "success": True,
@@ -102,7 +90,6 @@ async def upload_video(
                 "video_url": video.video_url,
                 "file_size": video.file_size,
                 "status": video.status.value,
-                "analysis_status": "queued",
                 "upload_result": upload_result
             }
         else:

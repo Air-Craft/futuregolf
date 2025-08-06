@@ -3,20 +3,22 @@ VideoAnalysis model for storing AI analysis results.
 """
 
 from sqlalchemy import Column, Integer, String, DateTime, Text, Float, Boolean, ForeignKey, Enum
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database.config import Base
 import enum
+import uuid as uuid_lib
 
 
 class AnalysisStatus(enum.Enum):
     """Enum for analysis status."""
-    PENDING = "pending"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
+    # Match database enum values (uppercase)
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
 class VideoAnalysis(Base):
@@ -27,24 +29,33 @@ class VideoAnalysis(Base):
     # Primary key
     id = Column(Integer, primary_key=True, index=True)
     
+    # UUID for API access
+    uuid = Column(UUID(as_uuid=True), unique=True, nullable=False, index=True, default=uuid_lib.uuid4)
+    
     # Foreign keys
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    video_id = Column(Integer, ForeignKey("videos.id"), nullable=False)
+    video_id = Column(Integer, ForeignKey("videos.id"), nullable=True)  # Nullable for two-step flow
     
     # Analysis metadata
     status = Column(Enum(AnalysisStatus), default=AnalysisStatus.PENDING)
     analysis_duration = Column(Float, nullable=True)  # Duration in seconds
     video_duration = Column(Float, nullable=True)  # Original video duration
     
+    # Video URLs  
+    originalVideoURL = Column("original_video_url", Text, nullable=True)  # Original video URL in GCS
+    processedVideoURL = Column("processed_video_url_new", Text, nullable=True)  # Processed video URL in GCS
+    
     # Processing information
     processing_started_at = Column(DateTime(timezone=True), nullable=True)
     processing_completed_at = Column(DateTime(timezone=True), nullable=True)
     error_message = Column(Text, nullable=True)
+    errorDescription = Column("error_description", Text, nullable=True)  # New field per spec
     
     # Analysis results stored as JSONB
     pose_data = Column(JSONB, nullable=True)  # MediaPipe pose detection results
     swing_metrics = Column(JSONB, nullable=True)  # Calculated swing metrics
-    ai_analysis = Column(JSONB, nullable=True)  # AI analysis from Gemini
+    ai_analysis = Column(JSONB, nullable=True)  # AI analysis from Gemini (legacy)
+    analysisJSON = Column("analysis_json", JSONB, nullable=True)  # AI analysis from LLM (new field per spec)
     coaching_script = Column(JSONB, nullable=True)  # Generated coaching script with timestamps
     
     # Specific analysis fields
@@ -137,6 +148,7 @@ class VideoAnalysis(Base):
         """Mark analysis as failed with error message."""
         self.status = AnalysisStatus.FAILED
         self.error_message = error_message
+        self.errorDescription = error_message  # Set both fields for compatibility
         self.processing_completed_at = func.now()
     
     def start_processing(self):
