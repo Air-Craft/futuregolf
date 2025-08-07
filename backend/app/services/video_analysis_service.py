@@ -47,6 +47,7 @@ class AnalysisOrchestrator:
             )
             session.add(analysis)
             await session.commit()
+            await session.refresh(analysis)
             return str(analysis.uuid)
     
     async def attach_video_to_analysis(self, uuid: str, video_blob_name: str) -> bool:

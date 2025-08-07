@@ -17,12 +17,20 @@ import logging
 
 from app.services.video_analysis_service import AnalysisOrchestrator
 from app.services.storage_service import get_storage_service
-from app.database.config import AsyncSessionLocal
+from app.database.config import AsyncSessionLocal, async_engine
 from app.models.video_analysis import VideoAnalysis, AnalysisStatus
 from app.models.user import User
 from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
+
+
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def cleanup_engine():
+    """Clean up SQLAlchemy engine after each test to prevent event loop issues"""
+    yield
+    # Clean up connection pool after test
+    await async_engine.dispose()
 
 
 @pytest.fixture(scope="function")
