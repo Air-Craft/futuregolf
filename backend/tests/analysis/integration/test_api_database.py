@@ -12,9 +12,18 @@ from fastapi import UploadFile, BackgroundTasks
 from sqlalchemy import select
 from unittest.mock import patch, Mock, AsyncMock
 
-from app.database.config import AsyncSessionLocal
+from app.database.config import AsyncSessionLocal, async_engine
 from app.models.video_analysis import VideoAnalysis, AnalysisStatus
 from app.models.user import User
+
+
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def cleanup_engine():
+    """Clean up SQLAlchemy engine after each test to prevent event loop issues"""
+    yield
+    # Clean up connection pool after test
+    from app.database.config import async_engine
+    await async_engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -22,26 +31,32 @@ async def test_user():
     """Create a test user for integration tests"""
     user_id = None
     
-    # Create user
-    async with AsyncSessionLocal() as session:
-        user = User(
-            email=f"api_test_{uuid.uuid4().hex}@example.com",
-            hashed_password="hashed_password_test"
-        )
-        session.add(user)
-        await session.commit()
-        await session.refresh(user)
-        user_id = user.id
-    
-    yield user_id
-    
-    # Cleanup
-    if user_id:
+    try:
+        # Create user
         async with AsyncSessionLocal() as session:
-            user = await session.get(User, user_id)
-            if user:
-                await session.delete(user)
-                await session.commit()
+            user = User(
+                email=f"api_test_{uuid.uuid4().hex}@example.com",
+                hashed_password="hashed_password_test"
+            )
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
+            user_id = user.id
+        
+        yield user_id
+        
+    finally:
+        # Cleanup
+        if user_id:
+            try:
+                async with AsyncSessionLocal() as session:
+                    user = await session.get(User, user_id)
+                    if user:
+                        await session.delete(user)
+                        await session.commit()
+            except Exception as e:
+                # Ignore cleanup errors
+                pass
 
 
 @pytest.fixture

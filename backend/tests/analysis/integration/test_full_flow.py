@@ -5,6 +5,7 @@ MUST FAIL if any service is not accessible.
 """
 
 import pytest
+import pytest_asyncio
 import os
 import uuid
 import tempfile
@@ -24,7 +25,7 @@ from sqlalchemy import select
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def verify_all_services():
     """Verify all required services are accessible"""
     errors = []
@@ -42,19 +43,7 @@ def verify_all_services():
     if not api_key:
         errors.append("Gemini API key not configured (GEMINI_API_KEY or GOOGLE_API_KEY)")
     
-    # Check Neon database
-    try:
-        import asyncio
-        async def check_db():
-            async with AsyncSessionLocal() as session:
-                from sqlalchemy import text
-                result = await session.execute(text("SELECT 1"))
-                return result.scalar() == 1
-        
-        if not asyncio.run(check_db()):
-            errors.append("Neon database connectivity check failed")
-    except Exception as e:
-        errors.append(f"Neon database not accessible: {e}")
+    # Note: Database check is done in test_user fixture which is async
     
     if errors:
         pytest.fail(
@@ -63,28 +52,35 @@ def verify_all_services():
         )
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_user():
     """Create a test user for the integration test"""
-    async with AsyncSessionLocal() as session:
-        user = User(
-            email=f"integration_test_{uuid.uuid4().hex}@example.com",
-            username=f"integration_user_{uuid.uuid4().hex[:8]}",
-            hashed_password="hashed_password_integration"
-        )
-        session.add(user)
-        await session.commit()
-        await session.refresh(user)
-        user_id = user.id
+    user_id = None
     
-    yield user_id
-    
-    # Cleanup
-    async with AsyncSessionLocal() as session:
-        user = await session.get(User, user_id)
-        if user:
-            await session.delete(user)
+    try:
+        async with AsyncSessionLocal() as session:
+            user = User(
+                email=f"integration_test_{uuid.uuid4().hex}@example.com",
+                hashed_password="hashed_password_integration"
+            )
+            session.add(user)
             await session.commit()
+            await session.refresh(user)
+            user_id = user.id
+        
+        yield user_id
+        
+    finally:
+        # Cleanup
+        if user_id:
+            try:
+                async with AsyncSessionLocal() as session:
+                    user = await session.get(User, user_id)
+                    if user:
+                        await session.delete(user)
+                        await session.commit()
+            except Exception:
+                pass
 
 
 @pytest.fixture

@@ -61,16 +61,48 @@ class GeminiVisionProvider(VisionModel):
         try:
             logger.info(f"Uploading video to Gemini: {video_path}")
             video_file = genai.upload_file(path=video_path)
+            
+            # Wait for the file to be processed
+            import time
+            while video_file.state.name == "PROCESSING":
+                logger.info("Waiting for video to be processed...")
+                time.sleep(1)
+                video_file = genai.get_file(video_file.name)
+            
+            if video_file.state.name != "ACTIVE":
+                raise ValueError(f"File failed to process. State: {video_file.state.name}")
 
             logger.info(f"Calling Gemini API with model: {self.model_name}")
             response = self.model.generate_content([prompt, video_file])
             
-            parsed_result = json.loads(response.text.strip())
-            return parsed_result
+            # Try to parse as JSON, if it fails return the raw text
+            try:
+                parsed_result = json.loads(response.text.strip())
+                return parsed_result
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse Gemini response as JSON: {e}")
+                logger.debug(f"Raw response: {response.text[:500]}...")
+                # Return a structured error response
+                return {
+                    "error": "Failed to parse response as JSON",
+                    "raw_response": response.text,
+                    "_metadata": {
+                        "error": str(e),
+                        "video_duration": 0,
+                        "analysis_duration": 0
+                    }
+                }
 
         except Exception as e:
             logger.error(f"Error in Gemini video analysis: {e}", exc_info=True)
-            return {"error": str(e)}
+            return {
+                "error": str(e),
+                "_metadata": {
+                    "error": str(e),
+                    "video_duration": 0,
+                    "analysis_duration": 0
+                }
+            }
         finally:
             if 'video_file' in locals():
                 genai.delete_file(video_file.name)
