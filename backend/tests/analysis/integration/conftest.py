@@ -4,6 +4,8 @@ These tests require all real services to be available.
 """
 
 import pytest
+import pytest_asyncio
+import asyncio
 import logging
 import os
 from typing import Generator
@@ -87,12 +89,11 @@ def skip_if_no_neon():
 
 def pytest_configure(config):
     """Configure pytest with custom markers"""
-    config.addinivalue_line(
-        "markers", "requires_gcs: Test requires Google Cloud Storage access"
-    )
-    config.addinivalue_line(
-        "markers", "requires_gemini: Test requires Gemini API access"
-    )
-    config.addinivalue_line(
-        "markers", "requires_neon: Test requires Neon database access"
-    )
+    # Register markers that might not be registered yet
+    for marker_def in [
+        "integration: Integration tests requiring real services",
+        "requires_neon: Test requires Neon database access", 
+        "requires_gcs: Test requires Google Cloud Storage access",
+        "requires_gemini: Test requires Gemini API access"
+    ]:
+        config.addinivalue_line("markers", marker_def)
