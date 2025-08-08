@@ -1,39 +1,55 @@
 INFO:     Will watch for changes in these directories: ['/Users/brian/Tech/Code/golfswinganalyzerai/dev/instance1/backend']
 INFO:     Uvicorn running on http://127.0.0.1:8009 (Press CTRL+C to quit)
-INFO:     Started reloader process [45704] using StatReload
+INFO:     Started reloader process [64833] using StatReload
 🔧 Server running on: 127.0.0.1:8009
-Process SpawnProcess-1:
-Traceback (most recent call last):
-  File "/Users/brian/.pyenv/versions/3.10.18/lib/python3.10/multiprocessing/process.py", line 314, in _bootstrap
-    self.run()
-  File "/Users/brian/.pyenv/versions/3.10.18/lib/python3.10/multiprocessing/process.py", line 108, in run
-    self._target(*self._args, **self._kwargs)
-  File "/Users/brian/Tech/Code/golfswinganalyzerai/dev/instance1/backend/.venv/lib/python3.10/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
-    target(sockets=sockets)
-  File "/Users/brian/Tech/Code/golfswinganalyzerai/dev/instance1/backend/.venv/lib/python3.10/site-packages/uvicorn/server.py", line 67, in run
-    return asyncio.run(self.serve(sockets=sockets))
-  File "/Users/brian/.pyenv/versions/3.10.18/lib/python3.10/asyncio/runners.py", line 44, in run
-    return loop.run_until_complete(main)
-  File "/Users/brian/.pyenv/versions/3.10.18/lib/python3.10/asyncio/base_events.py", line 649, in run_until_complete
-    return future.result()
-  File "/Users/brian/Tech/Code/golfswinganalyzerai/dev/instance1/backend/.venv/lib/python3.10/site-packages/uvicorn/server.py", line 71, in serve
-    await self._serve(sockets)
-  File "/Users/brian/Tech/Code/golfswinganalyzerai/dev/instance1/backend/.venv/lib/python3.10/site-packages/uvicorn/server.py", line 78, in _serve
-    config.load()
-  File "/Users/brian/Tech/Code/golfswinganalyzerai/dev/instance1/backend/.venv/lib/python3.10/site-packages/uvicorn/config.py", line 436, in load
-    self.loaded_app = import_from_string(self.app)
-  File "/Users/brian/Tech/Code/golfswinganalyzerai/dev/instance1/backend/.venv/lib/python3.10/site-packages/uvicorn/importer.py", line 22, in import_from_string
-    raise exc from None
-  File "/Users/brian/Tech/Code/golfswinganalyzerai/dev/instance1/backend/.venv/lib/python3.10/site-packages/uvicorn/importer.py", line 19, in import_from_string
-    module = importlib.import_module(module_str)
-  File "/Users/brian/.pyenv/versions/3.10.18/lib/python3.10/importlib/__init__.py", line 126, in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 992, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1004, in _find_and_load_unlocked
-ModuleNotFoundError: No module named 'app'
-INFO:     Stopping reloader process [45704]
+INFO:app.main:Log level set to INFO
+INFO:app.database.config:Detected Neon PostgreSQL hosting - applying optimized settings
+INFO:app.config.storage:Resolved credentials path: /Users/brian/Tech/Code/golfswinganalyzerai/dev/instance1/backend/./gcs-credential.json
+INFO:app.config.storage:Using Google Cloud API Key authentication
+INFO:app.config.storage:Using service account for GCS authentication
+INFO:app.config.storage:Using service account for GCS authentication
+INFO:app.config.storage:Using bucket: fg-video
+INFO:app.services.video_analysis_service:Clean VideoAnalysisService initialized with model: gemini-1.5-flash
+INFO:app.services.video_analysis_service:AnalysisOrchestrator initialized
+INFO:     Started server process [64835]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:51908 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:app.api.analysis:Created analysis entry with UUID: 940f3ae1-89d5-4ab0-8b85-b8c32cef8c2f
+INFO:     127.0.0.1:51909 - "POST /api/v1/analysis/create HTTP/1.1" 200 OK
+INFO:app.api.analysis:Created analysis entry with UUID: 83053905-d833-4e29-8b3c-2dee4b58a38f
+INFO:     127.0.0.1:51911 - "POST /api/v1/analysis/create HTTP/1.1" 200 OK
+INFO:app.services.storage_service:Video uploaded successfully - blob_name: videos/user_1/video_0/950d71ab-87f5-404f-a454-3f03e3685a3f, size: 31 bytes
+INFO:app.api.analysis:Queuing background analysis for UUID: 83053905-d833-4e29-8b3c-2dee4b58a38f
+INFO:     127.0.0.1:51914 - "PUT /api/v1/analysis/83053905-d833-4e29-8b3c-2dee4b58a38f/video HTTP/1.1" 200 OK
+INFO:app.services.video_analysis_service:Starting background analysis for UUID: 83053905-d833-4e29-8b3c-2dee4b58a38f
+ERROR:app.services.video_analysis_service:Background analysis failed for UUID 83053905-d833-4e29-8b3c-2dee4b58a38f: greenlet_spawn has not been called; can't call await_only() here. Was IO attempted in an unexpected place? (Background on this error at: https://sqlalche.me/e/20/xd2s)
+INFO:app.api.analysis:Created analysis entry with UUID: 67e22408-c634-45a6-b55e-616907cbd6e8
+INFO:     127.0.0.1:51917 - "POST /api/v1/analysis/create HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51933 - "GET /api/v1/analysis/67e22408-c634-45a6-b55e-616907cbd6e8 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51934 - "GET /api/v1/analysis/not-a-uuid HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:51935 - "GET /api/v1/analysis/83593d11-3438-4c4c-80d4-f0245c0557bd HTTP/1.1" 404 Not Found
+INFO:app.api.analysis:Created analysis entry with UUID: 02f0d840-f648-425a-bff9-d6a029a1a64b
+INFO:     127.0.0.1:51936 - "POST /api/v1/analysis/create HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51937 - "GET /api/v1/analysis/02f0d840-f648-425a-bff9-d6a029a1a64b HTTP/1.1" 200 OK
+INFO:app.services.storage_service:Video uploaded successfully - blob_name: videos/user_1/video_0/df7bffc5-62f2-46d7-afa4-47c20a9b1170, size: 18 bytes
+INFO:app.api.analysis:Queuing background analysis for UUID: 02f0d840-f648-425a-bff9-d6a029a1a64b
+INFO:     127.0.0.1:51938 - "PUT /api/v1/analysis/02f0d840-f648-425a-bff9-d6a029a1a64b/video HTTP/1.1" 200 OK
+INFO:app.services.video_analysis_service:Starting background analysis for UUID: 02f0d840-f648-425a-bff9-d6a029a1a64b
+ERROR:app.services.video_analysis_service:Background analysis failed for UUID 02f0d840-f648-425a-bff9-d6a029a1a64b: greenlet_spawn has not been called; can't call await_only() here. Was IO attempted in an unexpected place? (Background on this error at: https://sqlalche.me/e/20/xd2s)
+INFO:     127.0.0.1:51939 - "GET /api/v1/analysis/02f0d840-f648-425a-bff9-d6a029a1a64b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51941 - "GET /api/v1/analysis/02f0d840-f648-425a-bff9-d6a029a1a64b HTTP/1.1" 200 OK
+INFO:app.api.analysis:Created analysis entry with UUID: f412d59a-96c3-4d3a-99c2-507d0daeb5d7
+INFO:     127.0.0.1:51942 - "POST /api/v1/analysis/create HTTP/1.1" 200 OK
+INFO:app.api.analysis:Created analysis entry with UUID: bc7f62ec-4b4c-48c9-ad73-b30cec389c80
+INFO:     127.0.0.1:51943 - "POST /api/v1/analysis/create HTTP/1.1" 200 OK
+INFO:app.api.analysis:Created analysis entry with UUID: a3c40cc8-7bb3-46de-8c89-5c236458a0ba
+INFO:     127.0.0.1:51944 - "POST /api/v1/analysis/create HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51945 - "GET /api/v1/analysis/f412d59a-96c3-4d3a-99c2-507d0daeb5d7 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51946 - "GET /api/v1/analysis/bc7f62ec-4b4c-48c9-ad73-b30cec389c80 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51947 - "GET /api/v1/analysis/a3c40cc8-7bb3-46de-8c89-5c236458a0ba HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [64835]
+INFO:     Stopping reloader process [64833]

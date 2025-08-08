@@ -68,6 +68,8 @@ def start_test_server(port: Optional[int] = None, log_file: Optional[str] = None
     env['PORT'] = str(port)
     env['HOST'] = '127.0.0.1'
     env['LOG_LEVEL'] = 'INFO'
+    # Add backend directory to PYTHONPATH so 'app' module can be found
+    env['PYTHONPATH'] = backend_dir + os.pathsep + env.get('PYTHONPATH', '')
     
     # Pass through API keys if they exist
     for key in ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENAI_API_KEY', 'DATABASE_URL']:

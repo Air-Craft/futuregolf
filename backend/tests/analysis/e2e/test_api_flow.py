@@ -40,8 +40,6 @@ def test_create_analysis(api_v1_url):
         uuid.UUID(data["uuid"])
     except ValueError:
         pytest.fail("Invalid UUID returned")
-    
-    return data["uuid"]
 
 
 def test_upload_video_to_analysis(api_v1_url):
@@ -79,7 +77,7 @@ def test_upload_video_to_analysis(api_v1_url):
         data = upload_response.json()
         assert data["success"] is True
         assert data["uuid"] == analysis_uuid
-        assert data["status"] in ["pending_analysis", "analyzing"]
+        assert data["status"] in ["PENDING", "PROCESSING"]
 
 
 def test_get_analysis_status(api_v1_url):
@@ -98,7 +96,7 @@ def test_get_analysis_status(api_v1_url):
     assert get_response.status_code == 200
     data = get_response.json()
     assert data["uuid"] == analysis_uuid
-    assert data["status"] == "awaiting_video"
+    assert data["status"] == "PENDING"
     assert "created_at" in data
 
 
@@ -138,7 +136,7 @@ def test_complete_flow_simulation(api_v1_url):
     status_response = requests.get(f"{api_v1_url}/analysis/{analysis_uuid}")
     assert status_response.status_code == 200
     status_data = status_response.json()
-    assert status_data["status"] == "awaiting_video"
+    assert status_data["status"] == "PENDING"
     print(f"Initial status: {status_data['status']}")
     
     # Step 3: Try to upload video (might fail if GCS not configured)
@@ -155,7 +153,7 @@ def test_complete_flow_simulation(api_v1_url):
         # Still check that status remains awaiting_video
         status_response = requests.get(f"{api_v1_url}/analysis/{analysis_uuid}")
         assert status_response.status_code == 200
-        assert status_response.json()["status"] == "awaiting_video"
+        assert status_response.json()["status"] == "PENDING"
     else:
         print("Upload succeeded")
         assert upload_response.status_code == 200
@@ -173,15 +171,15 @@ def test_complete_flow_simulation(api_v1_url):
             current_status = poll_response.json()["status"]
             print(f"Poll {i+1}: Status = {current_status}")
             
-            # Status should progress from pending_analysis -> analyzing -> complete/failed
-            if current_status in ["complete", "failed"]:
+            # Status should progress from PENDING -> PROCESSING -> COMPLETED/FAILED
+            if current_status in ["COMPLETED", "FAILED"]:
                 print(f"Analysis finished with status: {current_status}")
                 
                 # If complete, should have analysis data
-                if current_status == "complete":
+                if current_status == "COMPLETED":
                     assert "analysisJSON" in poll_response.json()
                 # If failed, should have error description
-                elif current_status == "failed":
+                elif current_status == "FAILED":
                     assert "errorDescription" in poll_response.json()
                 break
         
@@ -211,6 +209,6 @@ def test_concurrent_analyses(api_v1_url):
         response = requests.get(f"{api_v1_url}/analysis/{analysis_uuid}")
         assert response.status_code == 200
         assert response.json()["uuid"] == analysis_uuid
-        assert response.json()["status"] == "awaiting_video"
+        assert response.json()["status"] == "PENDING"
     
     print("All analyses successfully created and retrievable")
